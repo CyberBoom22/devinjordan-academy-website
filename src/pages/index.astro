@@ -1,0 +1,92 @@
+---
+import BaseLayout from '@layouts/BaseLayout.astro';
+import CrestShield from '@components/CrestShield.astro';
+import { getSiteSettings, getCourseCategories } from '@lib/content';
+
+const site = await getSiteSettings();
+const categories = await getCourseCategories();
+---
+<BaseLayout isHome={true}>
+
+    <section id="home" class="hero">
+        <div>
+            <h1 class="anim-enter-up is-visible">
+                <span class="highlight-red">YOUR SECURITY</span><br />
+                IS OUR <span class="highlight-red">SERVICE</span>
+            </h1>
+            <h2 class="anim-enter-up delay-1 is-visible">SECURE YOUR FUTURE WITH ELITE TRAINING</h2>
+            <a href="/#services" class="btn anim-enter-up delay-2 is-visible">EXPLORE COURSES</a>
+        </div>
+    </section>
+
+    {/* ABOUT TEASER — the full story lives on the About page */}
+    <section class="about-section">
+        <div class="about-grid">
+            <div class="about-text anim-hard-left">
+                <h2>ELITE STANDARDS.<br />UNYIELDING PROTOCOL.</h2>
+                <h3>PREPARING NEW JERSEY'S BEST</h3>
+                <p>Devin Jordan Security Training Academy delivers state-approved SORA instruction for security professionals across Northern, Central, and Southern New Jersey — and now New York. We don't just teach the curriculum; we forge readiness, situational dominance, and unshakeable confidence.</p>
+                <p>From SORA compliance and firearms qualifications to CPR and active shooter response, our instructors bring real law enforcement and military experience straight into the classroom and onto the range.</p>
+                <a href="/about" class="btn btn-ghost">MEET THE ACADEMY</a>
+            </div>
+            <div class="about-image anim-hard-right">
+                <CrestShield />
+            </div>
+        </div>
+    </section>
+
+    {/* SERVICES */}
+    <section id="services" class="services-section">
+        <h2 class="section-title anim-enter-up">ACADEMY SERVICES &amp; TUITION</h2>
+        <p class="section-subtitle anim-enter-up delay-1">STATE APPROVED • PROFESSIONAL CERTIFICATION</p>
+
+        {categories.map((category) => (
+            <div class="services-category anim-snap-up">
+                <h3 class="category-title"><i class={category.icon}></i> {category.title}</h3>
+                <div class="pricing-grid">
+                    {category.courses.map((course) => (
+                        <div class="price-card">
+                            <div>
+                                <h4>{course.name}</h4>
+                                <p>{course.blurb}</p>
+                            </div>
+                            <div>
+                                <div class="price-tag">{course.price}</div>
+                                <a href="/#contact" class="btn btn-sm">{course.cta}</a>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        ))}
+    </section>
+
+    {/* CONTACT */}
+    <section id="contact" class="contact">
+        <div class="contact-container">
+            <div class="contact-text anim-hard-left">
+                <h2>TAKE<br />COMMAND<br />OF YOUR<br />TRAINING</h2>
+            </div>
+
+            <div class="contact-form anim-hard-right">
+                <h3>CONTACT ACADEMY</h3>
+                <div class="contact-details">
+                    {site.contacts.map((c) =>
+                        c.href ? (
+                            <a class="contact-line" href={c.href}>
+                                <i class={c.icon}></i>
+                                <span><strong>{c.label}</strong><br />{c.detail}</span>
+                            </a>
+                        ) : (
+                            <div class="contact-line">
+                                <i class={c.icon}></i>
+                                <span><strong>{c.label}</strong><br />{c.detail}</span>
+                            </div>
+                        ),
+                    )}
+                </div>
+            </div>
+        </div>
+    </section>
+
+</BaseLayout>

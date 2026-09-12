@@ -1,0 +1,7 @@
+---
+import { getSiteSettings } from '@lib/content';
+const site = await getSiteSettings();
+---
+<a href="/" class="brand-logo-container" id="brandLogo">
+    <img src="/assets/img/logo-header.webp" alt={`${site.name} Logo`} width="230" height="230" />
+</a>

@@ -1,0 +1,52 @@
+/* ==========================================================================
+   Breakpoints. Loaded last so these overrides win regardless of specificity
+   ties with the layer they are overriding.
+   ========================================================================== */
+@media (max-width: 1050px) {
+    .nav-links { gap: 26px; }
+    .nav-links a { font-size: 0.82rem; letter-spacing: 1px; }
+    .logo-spacer { width: 160px; }
+    nav.scrolled .logo-spacer { width: 120px; }
+}
+
+@media (max-width: 1000px) {
+    .dossier { grid-template-columns: 1fr; }
+    .dossier-photo { border-right: none; border-bottom: 1px solid #333; }
+    .dossier-body { padding: 34px 26px; }
+}
+
+@media (max-width: 900px) {
+    .contact-container { grid-template-columns: 1fr; gap: 40px; }
+    .about-grid { grid-template-columns: 1fr; }
+    .hero h1 { font-size: 3rem; }
+    .nav-links { display: none; }
+    .logo-spacer { width: 90px; }
+    nav.scrolled .logo-spacer { width: 90px; }
+    .nav-toggle {
+        display: block;
+        position: absolute;
+        left: 20px;
+        top: 50%;
+        transform: translateY(-50%);
+    }
+    .nav-container { justify-content: center; }
+    .brand-logo-container { top: 10px; }
+    .brand-logo-container img { height: 70px; }
+    .page-banner { padding: 150px 20px 70px 20px; }
+    .page-banner h1 { font-size: 2.4rem; }
+    .about-text h2 { font-size: 2.2rem; }
+    .contact-text h2 { font-size: 2.8rem; }
+    .dossier-body h3 { font-size: 1.6rem; }
+    .record-list li { grid-template-columns: 1fr; gap: 4px; }
+    .creed p { font-size: 1.05rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .anim-snap-up, .anim-enter-up, .anim-hard-left, .anim-hard-right {
+        opacity: 1 !important;
+        transform: none !important;
+        transition: none !important;
+    }
+    .btn:hover, .pillar:hover, .price-card:hover { transform: none; }
+}

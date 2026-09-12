@@ -1,0 +1,87 @@
+---
+/* The academy crest. Inline SVG rather than an image file so it stays crisp at
+   any size, inherits no extra request, and keeps its text selectable. The
+   `crest` class replaces what used to be a long inline style attribute. */
+---
+<svg viewBox="0 0 800 672" xmlns="http://www.w3.org/2000/svg" role="img"
+     aria-label="Devin Jordan Security Training Academy crest" class="crest">
+  <defs>
+    <pattern id="hatch" width="14" height="14" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+      <rect width="14" height="14" fill="#0F1114"/>
+      <line x1="0" y1="0" x2="0" y2="14" stroke="#16181D" stroke-width="6"/>
+    </pattern>
+    <linearGradient id="shieldField" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#B02222"/>
+      <stop offset="1" stop-color="#6E1212"/>
+    </linearGradient>
+    <linearGradient id="goldEdge" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#E2C482"/>
+      <stop offset="0.5" stop-color="#C5A059"/>
+      <stop offset="1" stop-color="#8F6F35"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="800" height="672" fill="url(#hatch)"/>
+  <rect x="14" y="14" width="772" height="644" fill="none" stroke="#2A2D33" stroke-width="1"/>
+
+  <g stroke="#C5A059" stroke-width="3">
+    <path d="M 30 62 V 30 H 62" fill="none"/>
+    <path d="M 738 30 H 770 V 62" fill="none"/>
+    <path d="M 770 610 V 642 H 738" fill="none"/>
+    <path d="M 62 642 H 30 V 610" fill="none"/>
+  </g>
+
+  <g font-family="Montserrat, sans-serif" font-weight="900" font-size="31" fill="#C5A059">
+  <text x="164.2" y="176.9" text-anchor="middle" transform="rotate(-36.1 164.2 176.9)">D</text>
+  <text x="185.0" y="162.7" text-anchor="middle" transform="rotate(-32.5 185.0 162.7)">E</text>
+  <text x="206.7" y="149.8" text-anchor="middle" transform="rotate(-28.9 206.7 149.8)">V</text>
+  <text x="229.1" y="138.3" text-anchor="middle" transform="rotate(-25.3 229.1 138.3)">I</text>
+  <text x="252.3" y="128.3" text-anchor="middle" transform="rotate(-21.7 252.3 128.3)">N</text>
+  <text x="300.2" y="112.7" text-anchor="middle" transform="rotate(-14.4 300.2 112.7)">J</text>
+  <text x="324.8" y="107.1" text-anchor="middle" transform="rotate(-10.8 324.8 107.1)">O</text>
+  <text x="349.7" y="103.2" text-anchor="middle" transform="rotate(-7.2 349.7 103.2)">R</text>
+  <text x="374.8" y="100.8" text-anchor="middle" transform="rotate(-3.6 374.8 100.8)">D</text>
+  <text x="400.0" y="100.0" text-anchor="middle" transform="rotate(0.0 400.0 100.0)">A</text>
+  <text x="425.2" y="100.8" text-anchor="middle" transform="rotate(3.6 425.2 100.8)">N</text>
+  <text x="475.2" y="107.1" text-anchor="middle" transform="rotate(10.8 475.2 107.1)">S</text>
+  <text x="499.8" y="112.7" text-anchor="middle" transform="rotate(14.4 499.8 112.7)">E</text>
+  <text x="524.0" y="119.7" text-anchor="middle" transform="rotate(18.1 524.0 119.7)">C</text>
+  <text x="547.7" y="128.3" text-anchor="middle" transform="rotate(21.7 547.7 128.3)">U</text>
+  <text x="570.9" y="138.3" text-anchor="middle" transform="rotate(25.3 570.9 138.3)">R</text>
+  <text x="593.3" y="149.8" text-anchor="middle" transform="rotate(28.9 593.3 149.8)">I</text>
+  <text x="615.0" y="162.7" text-anchor="middle" transform="rotate(32.5 615.0 162.7)">T</text>
+  <text x="635.8" y="176.9" text-anchor="middle" transform="rotate(36.1 635.8 176.9)">Y</text>
+  </g>
+  <text x="400" y="152" text-anchor="middle" font-family="Montserrat, sans-serif" font-weight="700" font-size="16" fill="#8E9196" letter-spacing="6">TRAINING ACADEMY</text>
+
+  <g>
+    <path d="M 400 178 L 516 216 V 344 C 516 432 464 486 400 517 C 336 486 284 432 284 344 V 216 Z"
+          fill="url(#shieldField)" stroke="url(#goldEdge)" stroke-width="7"/>
+    <path d="M 400 199 L 497 231 V 342 C 497 419 453 466 400 494 C 347 466 303 419 303 342 V 231 Z"
+          fill="none" stroke="#0F1114" stroke-width="2" opacity="0.55"/>
+    <path d="M 400.0 216.0 L 410.6 247.4 L 443.7 247.8 L 417.1 267.6 L 427.0 299.2 L 400.0 280.0 L 373.0 299.2 L 382.9 267.6 L 356.3 247.8 L 389.4 247.4 Z" fill="url(#goldEdge)"/>
+    <path d="M 312 372 L 400 320 L 488 372 L 488 340 L 400 288 L 312 340 Z" fill="#0F1114" opacity="0.85"/>
+    <path d="M 312 372 L 400 320 L 488 372" fill="none" stroke="url(#goldEdge)" stroke-width="4"/>
+    <rect x="334" y="398" width="132" height="40" fill="#0F1114" opacity="0.85"/>
+    <rect x="334" y="398" width="132" height="40" fill="none" stroke="url(#goldEdge)" stroke-width="2"/>
+    <text x="400" y="425" text-anchor="middle" font-family="Montserrat, sans-serif" font-weight="900" font-size="22" fill="#C5A059" letter-spacing="6">SORA</text>
+  </g>
+
+  <g stroke="#C5A059" stroke-width="2" opacity="0.7">
+    <line x1="66" y1="350" x2="232" y2="350"/>
+    <line x1="568" y1="350" x2="734" y2="350"/>
+  </g>
+  <g fill="#C5A059">
+    <circle cx="242" cy="350" r="4"/>
+    <circle cx="558" cy="350" r="4"/>
+  </g>
+
+  <g>
+    <path d="M 180 570 L 148 610 L 200 602 L 214 618 L 232 562 Z" fill="#6E1212"/>
+    <path d="M 620 570 L 652 610 L 600 602 L 586 618 L 568 562 Z" fill="#6E1212"/>
+    <path d="M 210 560 H 590 L 604 584 L 590 608 H 210 L 196 584 Z" fill="url(#shieldField)" stroke="url(#goldEdge)" stroke-width="3"/>
+    <text x="400" y="592" text-anchor="middle" font-family="Montserrat, sans-serif" font-weight="900" font-size="19" fill="#F1E3C4" letter-spacing="4">YOUR SECURITY IS OUR SERVICE</text>
+  </g>
+
+  <text x="400" y="646" text-anchor="middle" font-family="Montserrat, sans-serif" font-weight="700" font-size="15" fill="#8E9196" letter-spacing="8">NEW JERSEY • NEW YORK</text>
+</svg>

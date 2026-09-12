@@ -1,0 +1,14 @@
+---
+import { getSiteSettings } from '@lib/content';
+const site = await getSiteSettings();
+const { street, city, state, zip } = site.address;
+const phones = site.contacts.filter((c) => c.href?.startsWith('tel:'));
+---
+<footer>
+    <img class="footer-logo" src="/assets/img/logo-footer.webp" alt={site.name} />
+    <p>Copyright &copy; {site.copyrightYear} {site.name}</p>
+    <p class="footer-address">
+        {street}, {city}, {state} {zip}
+        {phones.map((p) => (<> | <a href={p.href}>{p.label}</a></>))}
+    </p>
+</footer>

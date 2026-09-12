@@ -1,0 +1,36 @@
+# Cloudflare Pages response headers.
+#
+# This file is why moving off GitHub Pages mattered: Pages serves static files
+# and cannot set response headers, so frame-ancestors, X-Frame-Options,
+# Permissions-Policy and HSTS were simply unavailable there. They are set here
+# for real, and they cover every response — JSON, fonts and images included —
+# not just HTML documents the way a <meta> tag would.
+
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https://images.unsplash.com; font-src 'self'; connect-src 'self'; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'none'; upgrade-insecure-requests
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: accelerometer=(), autoplay=(), camera=(), display-capture=(), encrypted-media=(), fullscreen=(self), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), usb=(), xr-spatial-tracking=()
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Resource-Policy: same-origin
+  X-DNS-Prefetch-Control: off
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+
+# Content-addressed build output and vendored assets never change in place,
+# so they can be cached indefinitely.
+/_astro/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/fonts/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/vendor/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/img/*
+  Cache-Control: public, max-age=604800
+
+# The find bar refetches this whenever the site is rebuilt.
+/search-index.json
+  Cache-Control: public, max-age=3600

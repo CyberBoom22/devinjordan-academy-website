@@ -1,0 +1,31 @@
+<div class="find-bar" id="findBar">
+    <div class="find-bar-inner">
+        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+        <input type="text" id="findInput" placeholder="Search this site... (e.g. SORA, CPR, ORI)"
+               autocomplete="off" aria-label="Search this site" />
+        <span class="find-count" id="findCount" role="status" aria-live="polite"></span>
+        <button class="find-nav-btn" id="findPrev" aria-label="Previous match"><i class="fa-solid fa-chevron-up"></i></button>
+        <button class="find-nav-btn" id="findNext" aria-label="Next match"><i class="fa-solid fa-chevron-down"></i></button>
+        <button class="find-nav-btn" id="findClose" aria-label="Close search"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="find-other" id="findOther" role="status" aria-live="polite"></div>
+</div>
+
+<style>
+    /* Matches found on other routes. The original site held every page in one
+       document so its search spanned the whole site; routes are real pages now,
+       so cross-page matches are offered as links instead. */
+    .find-other:not(:empty) {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 0 20px 12px 20px;
+        font-size: 0.85rem;
+        color: var(--text-muted);
+    }
+    .find-other a {
+        color: var(--accent);
+        text-decoration: none;
+        border-bottom: 1px solid rgba(197, 160, 89, 0.35);
+    }
+    .find-other a:hover { border-bottom-color: var(--accent); }
+</style>

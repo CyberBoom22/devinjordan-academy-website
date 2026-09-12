@@ -1,0 +1,316 @@
+/* ==========================================================================
+   ORI directory — Originating Agency Identifier lookup.
+   ========================================================================== */
+.ori-wrap {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 90px 20px;
+}
+
+.ori-mono { font-family: var(--font-mono); }
+
+/* The ORI7 vs ORI9 distinction — the two cards read as a pair */
+.ori-compare {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+    gap: 25px;
+    margin-bottom: 90px;
+}
+
+.ori-card {
+    background: var(--bg-card);
+    border: 1px solid #333;
+    border-top: 3px solid var(--hairline);
+    border-radius: 4px;
+    padding: 32px 30px;
+    display: flex;
+    flex-direction: column;
+}
+
+.ori-card.is-standard { border-top-color: var(--primary); }
+
+.ori-card-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 18px;
+}
+
+.ori-card h3 {
+    font-size: 1.25rem;
+    color: white;
+    letter-spacing: 2px;
+}
+
+.ori-badge {
+    font-family: var(--font-heading);
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 5px 11px;
+    border-radius: 2px;
+    border: 1px solid var(--hairline);
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.ori-badge.use-this {
+    color: #fff;
+    background: var(--primary);
+    border-color: #ff4444;
+}
+
+.ori-sample {
+    font-size: 2.1rem;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 4px;
+    line-height: 1.2;
+    word-break: break-all;
+    margin-bottom: 6px;
+}
+
+.ori-sample .pad {
+    color: #fff;
+    background: rgba(155, 27, 27, 0.55);
+    border-radius: 2px;
+    padding: 0 4px;
+}
+
+.ori-chars {
+    font-family: var(--font-heading);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 18px;
+}
+
+.ori-card p {
+    color: var(--text-muted);
+    font-size: 0.95rem;
+    margin-bottom: 14px;
+}
+
+.ori-rule {
+    margin-top: auto;
+    border-top: 1px solid var(--hairline);
+    padding-top: 16px;
+    font-size: 0.9rem;
+    color: var(--text-main);
+}
+
+.ori-rule strong {
+    display: block;
+    font-family: var(--font-heading);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--primary);
+    margin-bottom: 6px;
+}
+
+/* Directory controls */
+.ori-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 26px;
+}
+
+.ori-search {
+    flex: 1 1 280px;
+    background: var(--bg-card);
+    border: 1px solid var(--hairline);
+    border-radius: 3px;
+    color: var(--text-main);
+    font-family: var(--font-body);
+    font-size: 0.95rem;
+    padding: 13px 16px;
+}
+
+.ori-search::placeholder { color: #6B6E74; }
+
+.ori-search:focus,
+.ori-county-select:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.ori-county-select {
+    flex: 0 1 240px;
+    background: var(--bg-card);
+    border: 1px solid var(--hairline);
+    border-radius: 3px;
+    color: var(--text-main);
+    font-family: var(--font-heading);
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 13px 14px;
+    cursor: pointer;
+}
+
+.ori-count {
+    font-family: var(--font-heading);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--accent);
+    white-space: nowrap;
+}
+
+/* Directory listing */
+.ori-county { margin-bottom: 38px; }
+
+.ori-county-head {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    flex-wrap: wrap;
+    border-bottom: 2px solid var(--primary);
+    padding-bottom: 8px;
+    margin-bottom: 4px;
+}
+
+.ori-county-head h3 {
+    font-size: 1.2rem;
+    color: white;
+    letter-spacing: 2px;
+}
+
+.ori-fips {
+    font-size: 0.68rem;
+    letter-spacing: 2px;
+    color: var(--text-muted);
+}
+
+.ori-tally {
+    margin-left: auto;
+    font-family: var(--font-heading);
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.ori-colhead {
+    display: grid;
+    grid-template-columns: 1fr 140px 160px;
+    gap: 14px;
+    padding: 10px 12px 8px 12px;
+    font-family: var(--font-heading);
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.ori-colhead .col-9 { color: var(--primary); }
+
+.ori-row {
+    display: grid;
+    grid-template-columns: 1fr 140px 160px;
+    gap: 14px;
+    align-items: center;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--hairline);
+    background: var(--bg-card);
+}
+
+.ori-row:nth-child(odd) { background: #191B20; }
+.ori-row:hover { background: #23262D; }
+
+.ori-agency {
+    font-size: 0.95rem;
+    color: var(--text-main);
+}
+
+.ori-chip {
+    font-family: var(--font-mono);
+    font-size: 0.88rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    width: 100%;
+    text-align: left;
+    padding: 8px 10px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: background 0.25s, color 0.25s, border-color 0.25s;
+}
+
+/* Short form: deliberately quiet */
+.ori-chip.chip-7 {
+    background: transparent;
+    border: 1px dashed var(--hairline);
+    color: var(--text-muted);
+}
+
+.ori-chip.chip-7:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+/* Nine-character form: the one to hand over */
+.ori-chip.chip-9 {
+    background: var(--nav-bg);
+    border: 1px solid #4A3E28;
+    color: var(--accent);
+}
+
+.ori-chip.chip-9:hover {
+    background: var(--primary);
+    border-color: #ff4444;
+    color: #fff;
+}
+
+.ori-chip.copied {
+    background: rgba(62, 107, 58, 0.35) !important;
+    border-color: #3E6B3A !important;
+    color: #A8D5A2 !important;
+}
+
+.ori-chip .chip-kind {
+    display: none;
+    font-family: var(--font-heading);
+    font-size: 0.6rem;
+    letter-spacing: 2px;
+    color: var(--text-muted);
+    margin-right: 8px;
+}
+
+.ori-empty {
+    text-align: center;
+    padding: 60px 20px;
+    border: 1px dashed var(--hairline);
+    border-radius: 4px;
+    color: var(--text-muted);
+}
+
+.ori-empty i {
+    font-size: 1.8rem;
+    color: var(--accent);
+    margin-bottom: 16px;
+    display: block;
+}
+
+@media (max-width: 760px) {
+    .ori-colhead { display: none; }
+    .ori-row {
+        grid-template-columns: 1fr;
+        gap: 8px;
+        padding: 14px 12px;
+    }
+    .ori-agency { font-weight: 700; }
+    .ori-chip .chip-kind { display: inline; }
+    .ori-sample { font-size: 1.6rem; letter-spacing: 2px; }
+}

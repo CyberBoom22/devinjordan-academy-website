@@ -1,0 +1,46 @@
+/* ==========================================================================
+   Reset and element defaults.
+   ========================================================================== */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    scroll-behavior: smooth;
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
+body {
+    font-family: var(--font-body);
+    background-color: var(--bg-dark);
+    color: var(--text-main);
+    overflow-x: hidden;
+    line-height: 1.6;
+    /* Nothing may push the layout wider than the screen */
+    max-width: 100%;
+    overflow-wrap: break-word;
+}
+
+/* Media scales down with its container instead of forcing a scrollbar */
+img, svg, video, iframe { max-width: 100%; }
+
+/* Elements that need a fixed height set one in their own rule, which wins on
+   specificity. The original used img:not([style*="height"]), which depended on
+   inline style attributes — those are gone, because inline styles are what
+   force a Content Security Policy to allow 'unsafe-inline'. */
+img { height: auto; }
+
+h1, h2, h3, h4, .heading-font {
+    font-family: var(--font-heading);
+    text-transform: uppercase;
+}
+
+a { color: inherit; }
+
+/* Utility: hide without an inline style attribute, so that style-src can stay
+   'self' with no 'unsafe-inline'. Scripts toggle this class rather than
+   writing element.style.display. */
+.is-hidden { display: none !important; }

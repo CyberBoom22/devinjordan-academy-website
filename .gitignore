@@ -5,3 +5,9 @@ Thumbs.db
 *.log
 node_modules/
 .env*
+
+# build output and tooling
+dist/
+.astro/
+.wrangler/
+.dev.vars

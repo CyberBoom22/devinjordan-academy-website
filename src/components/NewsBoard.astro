@@ -1,0 +1,133 @@
+---
+import { getNewsFeed, getNewsQuickCodes } from '@lib/content';
+
+const feed = await getNewsFeed();
+const quickCodes = await getNewsQuickCodes();
+
+const quick = quickCodes
+    .map((code) => feed.states.find((s) => s.code === code))
+    .filter((s): s is NonNullable<typeof s> => Boolean(s));
+
+const initialState = (quick[0] ?? feed.states[0])?.code ?? 'NJ';
+
+const total = (code: string) => {
+    const s = feed.states.find((x) => x.code === code);
+    if (!s) return 0;
+    return s.categories.legislation.length + s.categories.cases.length;
+};
+
+const updatedLabel = (() => {
+    if (!feed.ready) return null;
+    if (!feed.updated) return null;
+    const d = new Date(feed.updated);
+    if (Number.isNaN(d.valueOf())) return null;
+    return d.toLocaleString('en-US', {
+        month: 'long', day: 'numeric', year: 'numeric',
+        hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York',
+    });
+})();
+
+const statusClass = (status: string) =>
+    ['enacted', 'pending', 'decided', 'closed'].includes(status.toLowerCase())
+        ? status.toLowerCase()
+        : '';
+
+const safeUrl = (url: string) => (/^https?:\/\//i.test(url) ? url : '#');
+---
+<div id="newsBoard" data-ready={String(feed.ready)} data-initial-state={initialState}>
+    <p class="news-updated" id="newsUpdated">
+        {feed.ready
+            ? (updatedLabel ? <>LAST UPDATED <span>{updatedLabel} ET</span></> : '')
+            : <span>AUTOMATIC UPDATES COMING SOON</span>}
+    </p>
+
+    {/* LEVEL 1: STATE */}
+    <div class="news-level-label">Select jurisdiction</div>
+    <div class="state-picker">
+        <div class="state-pills" id="statePills">
+            {quick.map((s) => (
+                <button class:list={['state-pill', s.code === initialState && 'active']}
+                        data-state={s.code} data-name={s.name}>
+                    {s.name}
+                    {feed.ready && <span class="pill-count">{total(s.code)}</span>}
+                </button>
+            ))}
+        </div>
+        <select id="stateSelect" class="state-select" aria-label="Choose a state or jurisdiction">
+            {feed.states.map((s) => (
+                <option value={s.code} data-name={s.name} selected={s.code === initialState}>
+                    {s.name}{feed.ready ? ` (${total(s.code)})` : ''}
+                </option>
+            ))}
+        </select>
+    </div>
+
+    {/* LEVEL 2: CATEGORY */}
+    <div class="news-tabs" id="newsTabs">
+        <button class="news-tab active" data-cat="legislation">Laws &amp; Bills</button>
+        <button class="news-tab" data-cat="cases">Court Cases</button>
+    </div>
+
+    {/* LEVEL 3: SUMMARIES */}
+    <div id="newsList">
+        {!feed.ready && (
+            <div class="news-loading">
+                <div class="news-loader">
+                    <div class="news-spinner"></div>
+                    <img class="news-loader-logo" src="/assets/img/logo-header.webp"
+                         alt="Devin Jordan Security Training Academy" />
+                </div>
+                <p class="news-loading-label">
+                    Connecting <span class="news-loading-state">New Jersey</span> updates<span class="news-dots"></span>
+                </p>
+                <p class="news-loading-sub">
+                    Automatic tracking of <span class="news-loading-what">bills and laws</span> for this
+                    jurisdiction is still being set up. Check back soon, or call the academy at
+                    (848) 398-0976 with questions about current requirements.
+                </p>
+            </div>
+        )}
+
+        {feed.ready && feed.states.map((s) => (
+            <>
+                {(['legislation', 'cases'] as const).map((cat) =>
+                    s.categories[cat].map((item) => (
+                        <article class="news-item" data-state={s.code} data-cat={cat}>
+                            <div class="news-item-head">
+                                <h3>{item.title}</h3>
+                                {item.status && (
+                                    <span class:list={['status-badge', statusClass(item.status)]}>
+                                        {item.status}
+                                    </span>
+                                )}
+                            </div>
+                            {item.date && <div class="news-date">{item.date}</div>}
+                            <p class="news-summary">{item.summary}</p>
+                            {item.sources.length > 0 && (
+                                <div class="news-sources">
+                                    <span class="src-label">Sources</span>
+                                    {item.sources.map((src) => (
+                                        <a href={safeUrl(src.url)} target="_blank" rel="noopener noreferrer">
+                                            {src.label || src.url}
+                                            {' '}<i class="fa-solid fa-arrow-up-right-from-square src-ext-icon"></i>
+                                        </a>
+                                    ))}
+                                </div>
+                            )}
+                        </article>
+                    )),
+                )}
+                </>
+        ))}
+
+        {feed.ready && (
+            <div class="news-empty is-hidden">
+                <i class="fa-solid fa-folder-open"></i>
+                <p>
+                    No <span class="news-empty-what">bills or laws</span> currently tracked for
+                    {' '}<span class="news-empty-state">this state</span>. Check back after the next daily update.
+                </p>
+            </div>
+        )}
+    </div>
+</div>

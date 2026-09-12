@@ -1,0 +1,12 @@
+---
+import { getSiteSettings } from '@lib/content';
+const site = await getSiteSettings();
+---
+{/* The original copied the header logo's data URI into this element with an
+    inline script. The logo is a real file now, so it simply points at it — one
+    fewer inline script, and the browser reuses the same cached image. */}
+<div id="preloader" role="status" aria-label="Loading">
+    <img class="preloader-logo" src="/assets/img/logo-header.webp" alt={site.name} />
+    <div class="preloader-bar"></div>
+    <div class="preloader-text">{site.name}</div>
+</div>

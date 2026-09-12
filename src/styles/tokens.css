@@ -1,0 +1,29 @@
+/* ==========================================================================
+   Design tokens — the single source of truth for the academy's palette.
+   Values are carried over unchanged from the original site; nothing here
+   should be edited casually, because every component reads from these.
+   ========================================================================== */
+:root {
+    --primary: #9B1B1B; /* Signature Maroon / Red */
+    --accent: #C5A059;  /* Executive Gold / Bronze */
+    --bg-dark: #121418; /* Tactical Charcoal base */
+    --bg-card: #1C1E24; /* Dark Slate for depth */
+    --text-main: #E4E4E4;
+    --text-muted: #8E9196;
+    --nav-bg: #0A0B0D;
+    --hairline: #2A2D33;
+
+    /* Type stacks. Both faces are self-hosted — see fonts.css. */
+    --font-heading: 'Montserrat', sans-serif;
+    --font-body: 'Roboto', sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Courier New', monospace;
+
+    /* Hero background.
+       TODO: self-host. This is the one remaining third-party request on the
+       site and the only reason img-src in public/_headers is not plain 'self'.
+       Download the file to public/assets/img/hero.jpg, change this to
+       url('/assets/img/hero.jpg'), and drop images.unsplash.com from img-src.
+       It could not be fetched from the build environment used to write this,
+       because outbound access to Unsplash was blocked there. */
+    --hero-image: url('https://images.unsplash.com/photo-1549488344-c6a6f11656e1?auto=format&fit=crop&w=1920&q=80');
+}

@@ -1,0 +1,24 @@
+{
+  "name": "devinjordan-academy-website",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Devin Jordan Security Training Academy \u2014 website and staff CMS",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build && node scripts/build-search-index.mjs",
+    "preview": "wrangler pages dev ./dist",
+    "check": "astro check",
+    "deploy": "astro build && wrangler pages deploy ./dist"
+  },
+  "dependencies": {
+    "@astrojs/cloudflare": "^12.6.13",
+    "@astrojs/sitemap": "^3.7.4",
+    "astro": "^5.18.2"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.10",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.131.1"
+  }
+}

@@ -1,0 +1,86 @@
+---
+import '@styles/global.css';
+import SiteNav from '@components/SiteNav.astro';
+import FindBar from '@components/FindBar.astro';
+import BrandLogo from '@components/BrandLogo.astro';
+import Preloader from '@components/Preloader.astro';
+import SiteFooter from '@components/SiteFooter.astro';
+import { getSiteSettings } from '@lib/content';
+
+interface Props {
+    title?: string;
+    description?: string;
+    /** The home page keeps its full-size logo until the visitor scrolls. */
+    isHome?: boolean;
+    /** Set on 404 and any other page that must stay out of search results. */
+    noindex?: boolean;
+}
+
+const site = await getSiteSettings();
+const {
+    title = site.name,
+    description = site.description,
+    isHome = false,
+    noindex = false,
+} = Astro.props;
+
+const canonical = new URL(Astro.url.pathname, Astro.site ?? site.domain).href;
+const ogImage = new URL('/assets/img/logo-header.webp', Astro.site ?? site.domain).href;
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    {noindex && <meta name="robots" content="noindex" />}
+
+    {/* The Content Security Policy, frame-ancestors, X-Frame-Options,
+        X-Content-Type-Options, Permissions-Policy and HSTS are all sent as real
+        response headers from public/_headers. Headers beat meta tags: they
+        cover non-HTML responses too, and frame-ancestors is ignored entirely
+        when it arrives in a meta tag. See SECURITY.md. */}
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <meta name="theme-color" content="#121418" />
+
+    {/* Open Graph */}
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={site.name} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={ogImage} />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    {/* Favicons */}
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/img/favicon-32.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/img/apple-touch-icon.png" />
+
+    {/* The two faces used above the fold, fetched in parallel with the CSS */}
+    <link rel="preload" as="font" type="font/woff2" crossorigin
+          href="/assets/fonts/montserrat-latin-900-normal.woff2" />
+    <link rel="preload" as="font" type="font/woff2" crossorigin
+          href="/assets/fonts/roboto-latin-400-normal.woff2" />
+
+    <link rel="stylesheet" href="/assets/vendor/fontawesome-free-6.4.0/css/all.min.css" />
+
+    <script>
+        import '../scripts/main';
+    </script>
+</head>
+<body data-home={String(isHome)}>
+    <Preloader />
+    <SiteNav />
+    <FindBar />
+    <BrandLogo />
+
+    <main>
+        <slot />
+    </main>
+
+    <SiteFooter />
+</body>
+</html>

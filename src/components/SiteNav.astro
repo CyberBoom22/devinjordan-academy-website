@@ -1,0 +1,42 @@
+---
+import { navLeft, navRight, navAll } from '@lib/nav';
+
+const path = Astro.url.pathname.replace(/\/$/, '') || '/';
+const isActive = (href: string) => (href.replace(/\/$/, '') || '/') === path;
+---
+<nav>
+    <div class="nav-container">
+        <div class="nav-links nav-left">
+            {navLeft.map((item) => (
+                <a href={item.href} class={isActive(item.href) ? 'active' : undefined}>{item.label}</a>
+            ))}
+        </div>
+
+        {/* Space reserved for the fixed central logo */}
+        <div class="logo-spacer"></div>
+
+        <div class="nav-links nav-right">
+            {navRight.map((item) => (
+                <a href={item.href} class={isActive(item.href) ? 'active' : undefined}>{item.label}</a>
+            ))}
+        </div>
+
+        <button class="nav-search-btn" id="findToggle" aria-label="Search this site"
+                aria-expanded="false" aria-controls="findBar">
+            <i class="fa-solid fa-magnifying-glass"></i>
+        </button>
+
+        <button class="nav-toggle" id="navToggle" aria-label="Open menu"
+                aria-expanded="false" aria-controls="mobileMenu">
+            <i class="fa-solid fa-bars"></i>
+        </button>
+    </div>
+
+    <div class="mobile-menu" id="mobileMenu">
+        {navAll.map((item) => (
+            <a href={item.href} class={isActive(item.href) ? 'active' : undefined}>
+                {item.mobileLabel ?? item.label}
+            </a>
+        ))}
+    </div>
+</nav>

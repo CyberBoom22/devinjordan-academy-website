@@ -1,0 +1,14 @@
+/* ==========================================================================
+   Single global entry point. Import order IS the cascade order — layers are
+   arranged so later files override earlier ones on specificity ties, which is
+   how the original single-file stylesheet behaved. Do not reorder casually.
+   ========================================================================== */
+@import './fonts.css';
+@import './tokens.css';
+@import './base.css';
+@import './chrome.css';
+@import './sections.css';
+@import './news.css';
+@import './ori.css';
+@import './animations.css';
+@import './responsive.css';

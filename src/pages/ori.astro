@@ -1,0 +1,112 @@
+---
+import BaseLayout from '@layouts/BaseLayout.astro';
+import PageBanner from '@components/PageBanner.astro';
+import OriDirectory from '@components/OriDirectory.astro';
+import CtaBand from '@components/CtaBand.astro';
+import { getOriTotals } from '@lib/content';
+
+const totals = await getOriTotals();
+---
+<BaseLayout title="New Jersey ORI Directory — Devin Jordan Security Training Academy"
+            description="Every municipal police department, county sheriff, prosecutor's office and State Police station in New Jersey, with both ORI codes used to route fingerprint-based background checks.">
+
+    <PageBanner
+        eyebrow="ORIGINATING AGENCY IDENTIFIERS"
+        title="NEW JERSEY"
+        titleAccent="ORI DIRECTORY"
+        lede="Every municipal police department, county sheriff, prosecutor's office and State Police station in New Jersey — with both ORI codes used to route fingerprint-based background checks to the right agency."
+    />
+
+    <div class="ori-wrap">
+
+        {/* Every figure is derived from the directory data, so the page cannot
+            disagree with the table below it. */}
+        <div class="stat-strip anim-enter-up">
+            <div class="stat">
+                <div class="stat-num">{totals.counties}</div>
+                <span class="stat-label">Counties covered</span>
+            </div>
+            <div class="stat">
+                <div class="stat-num">{totals.agencies}</div>
+                <span class="stat-label">Agencies listed</span>
+            </div>
+            <div class="stat">
+                <div class="stat-num">2</div>
+                <span class="stat-label">Code formats &mdash; ORI7 &amp; ORI9</span>
+            </div>
+        </div>
+
+        <div class="section-head anim-enter-up">
+            <h2>ORI7 <em>vs.</em> ORI9</h2>
+        </div>
+
+        <div class="ori-compare">
+            <div class="ori-card anim-hard-left">
+                <div class="ori-card-head">
+                    <h3>ORI7</h3>
+                    <span class="ori-badge">Short form</span>
+                </div>
+                <div class="ori-sample ori-mono">NJ00101</div>
+                <div class="ori-chars">Seven characters</div>
+                <p>The compact form of the same identifier: the two-letter state code followed by the county and municipality digits. It names the exact same agency as the ORI9 &mdash; it is simply truncated.</p>
+                <div class="ori-rule">
+                    <strong>When to use it</strong>
+                    Only when a form or portal explicitly asks for a seven-character ORI. If the field doesn't say, this is not the one.
+                </div>
+            </div>
+
+            <div class="ori-card is-standard anim-hard-right">
+                <div class="ori-card-head">
+                    <h3>ORI9</h3>
+                    <span class="ori-badge use-this">Use this one</span>
+                </div>
+                <div class="ori-sample ori-mono">NJ00101<span class="pad">00</span></div>
+                <div class="ori-chars">Nine characters &mdash; ORI7 plus two padding characters</div>
+                <p>The standard nine-character form, and what nearly every fingerprinting appointment, firearms application and background-check form expects. It is the ORI7 with two characters appended to fill the field.</p>
+                <div class="ori-rule">
+                    <strong>When to use it</strong>
+                    By default. Give the ORI9 unless you are told, in writing, that seven characters are required.
+                </div>
+            </div>
+        </div>
+
+        <div class="section-head anim-enter-up">
+            <h2>WORKING WITH <em>ORI CODES</em></h2>
+        </div>
+
+        <div class="pillars">
+            <div class="pillar anim-snap-up">
+                <i class="fa-solid fa-fingerprint"></i>
+                <h3>What an ORI Is</h3>
+                <p>An Originating Agency Identifier is the FBI-assigned code for a law enforcement agency. In New Jersey every code starts with NJ, followed by the county and municipality digits &mdash; NJ0010100 is Absecon PD in Atlantic County.</p>
+            </div>
+            <div class="pillar anim-snap-up delay-1">
+                <i class="fa-solid fa-file-signature"></i>
+                <h3>When You'll Need One</h3>
+                <p>Firearms applications &mdash; FID card, permit to purchase, and concealed carry &mdash; ask for the ORI of the investigating agency, which is the police department covering where you live.</p>
+            </div>
+            <div class="pillar anim-snap-up delay-2">
+                <i class="fa-solid fa-clipboard-check"></i>
+                <h3>Where It Goes</h3>
+                <p>You enter it when scheduling live-scan fingerprints, alongside the service code your application supplies. SORA registration itself uses a service code from the NJSP portal, not an ORI you look up here.</p>
+            </div>
+        </div>
+
+        <div class="section-head anim-enter-up">
+            <h2>AGENCY <em>LOOKUP</em></h2>
+        </div>
+
+        <OriDirectory />
+
+        <div class="news-disclaimer">
+            <strong>VERIFY BEFORE YOU FILE.</strong>
+            ORI codes are assigned and maintained by the FBI and the New Jersey State Police, and agencies are occasionally merged,
+            renamed, or retired. This directory is provided as a convenience for our students. Confirm the code with the agency
+            handling your application before submitting a form or scheduling fingerprints.
+        </div>
+    </div>
+
+    <CtaBand heading="NEED HELP WITH YOUR PAPERWORK?"
+             body="Our instructors walk every student through fingerprinting and the state application process." />
+
+</BaseLayout>

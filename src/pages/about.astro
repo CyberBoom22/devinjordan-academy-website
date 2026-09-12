@@ -1,0 +1,98 @@
+---
+import BaseLayout from '@layouts/BaseLayout.astro';
+import PageBanner from '@components/PageBanner.astro';
+import CrestSeal from '@components/CrestSeal.astro';
+import CtaBand from '@components/CtaBand.astro';
+---
+<BaseLayout title="About — Devin Jordan Security Training Academy"
+            description="Armed and unarmed SORA certification across Northern, Central, and Southern New Jersey — and now serving New York.">
+
+    <PageBanner
+        eyebrow="DEVIN JORDAN SECURITY TRAINING ACADEMY"
+        title="WELCOME TO"
+        titleAccent="THE ACADEMY"
+        lede="Armed and unarmed SORA certification across Northern, Central, and Southern New Jersey — and now serving New York."
+        animate={true}
+    />
+
+    <div class="about-page-wrap">
+
+        <div class="stat-strip anim-enter-up">
+            <div class="stat">
+                <div class="stat-num">130+</div>
+                <span class="stat-label">Combined years in law enforcement</span>
+            </div>
+            <div class="stat">
+                <div class="stat-num">2</div>
+                <span class="stat-label">States served: NJ &amp; NY</span>
+            </div>
+            <div class="stat">
+                <div class="stat-num">100%</div>
+                <span class="stat-label">State-approved SORA curriculum</span>
+            </div>
+        </div>
+
+        <div class="about-grid about-grid-spaced">
+            <div class="about-text anim-hard-left">
+                <h2>NEW JERSEY'S<br />BEST.</h2>
+                <h3>TRAINED TO A HIGHER STANDARD</h3>
+                <p>We offer armed and unarmed SORA certification classes throughout Northern, Central, and Southern New Jersey — and now New York as well. Our SORA-certified instructors deliver the state-approved training security officers need to get licensed, get hired, and advance their careers.</p>
+                <p>We're a professional organization that prides itself on outstanding customer service, hands-on instruction, and professional excellence in every class we teach.</p>
+            </div>
+            <div class="about-image anim-hard-right">
+                <CrestSeal />
+            </div>
+        </div>
+
+        <div class="section-head anim-enter-up">
+            <h2>WHAT SETS THE <em>ACADEMY</em> APART</h2>
+        </div>
+        <div class="pillars">
+            <div class="pillar anim-snap-up">
+                <i class="fa-solid fa-shield-halved"></i>
+                <h3>New Jersey's Best</h3>
+                <p>State-approved SORA instruction delivered across the whole state, built to get officers licensed, hired, and moving up. Outstanding service is the baseline, not the selling point.</p>
+            </div>
+            <div class="pillar anim-snap-up delay-1">
+                <i class="fa-solid fa-user-shield"></i>
+                <h3>Armed &amp; Unarmed Training</h3>
+                <p>Both tracks are taught by instructors with real law enforcement and security experience. Whether you're starting out or renewing your credential, you leave with the skills employers actually look for.</p>
+            </div>
+            <div class="pillar anim-snap-up delay-2">
+                <i class="fa-solid fa-medal"></i>
+                <h3>Experienced Professionals</h3>
+                <p>With over 130 combined years of law enforcement and investigative experience, our mission is thorough, professional service for every client who walks through the door.</p>
+            </div>
+        </div>
+
+        <div class="section-head anim-enter-up">
+            <h2>COMMAND <em>LEADERSHIP</em></h2>
+        </div>
+
+        <div class="dossier anim-snap-up">
+            <div class="dossier-photo">
+                <img src="/assets/img/headshot.jpg" alt="Che' Gary, Owner and Lead SORA Instructor" />
+                <span class="badge">USMC • RET. NEWARK PD</span>
+            </div>
+            <div class="dossier-body">
+                <h3>Che' Gary</h3>
+                <span class="dossier-role">Founder &amp; Owner / Lead SORA Instructor</span>
+                <p>After serving active duty in the United States Marine Corps both here and abroad, Retired Police Officer and Detective Che' Gary went on to a highly decorated career with the Newark Police Department. A trained investigator and experienced security manager, Che' brings a wealth of experience, a unique skill set, and a keen attention to detail to a one-of-a-kind security company — and he personally leads instruction in the classroom and on the range.</p>
+                <ul class="record-list">
+                    <li><span class="rec-label">Military Service</span><span class="rec-value">United States Marine Corps — active duty, domestic and abroad</span></li>
+                    <li><span class="rec-label">Law Enforcement</span><span class="rec-value">Retired Police Officer / Detective, Newark Police Department</span></li>
+                    <li><span class="rec-label">Specialties</span><span class="rec-value">Criminal investigation, security management, firearms instruction</span></li>
+                    <li><span class="rec-label">At the Academy</span><span class="rec-value">Founder, owner, and lead instructor for all SORA certification courses</span></li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="creed anim-enter-up">
+            <p>Bonded by a lifetime of trust and service to <span>the country</span> and <span>the community</span>.</p>
+        </div>
+    </div>
+
+    <CtaBand heading="READY TO GET CERTIFIED?"
+             body="Classes run statewide. Tell us which course you need and we'll get you scheduled." />
+
+</BaseLayout>

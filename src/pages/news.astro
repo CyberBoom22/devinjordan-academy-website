@@ -1,0 +1,28 @@
+---
+import BaseLayout from '@layouts/BaseLayout.astro';
+import PageBanner from '@components/PageBanner.astro';
+import NewsBoard from '@components/NewsBoard.astro';
+---
+<BaseLayout title="News &amp; Legislation — Devin Jordan Security Training Academy"
+            description="Current firearm legislation and court decisions affecting security professionals, organized by state.">
+
+    <PageBanner
+        eyebrow="FIREARM LAW & POLICY TRACKER"
+        title="NEWS &"
+        titleAccent="LEGISLATION"
+        lede="Current firearm legislation and court decisions affecting security professionals, organized by state."
+    />
+
+    <div class="news-wrap">
+        <NewsBoard />
+
+        <div class="news-disclaimer">
+            <strong>INFORMATIONAL ONLY &mdash; NOT LEGAL ADVICE.</strong>
+            These summaries are provided as a convenience for security professionals and are not a substitute for the
+            actual text of a law or for advice from a licensed attorney. Laws change frequently and summaries may lag
+            behind the current status. Always verify against the linked primary sources before acting, and consult an
+            attorney for guidance on your specific situation.
+        </div>
+    </div>
+
+</BaseLayout>

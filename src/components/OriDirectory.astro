@@ -1,0 +1,60 @@
+---
+import { getOriDirectory, getOriTotals } from '@lib/content';
+
+const counties = await getOriDirectory();
+const totals = await getOriTotals();
+
+/** ORI7 is 'NJ' + code; ORI9 appends '00'. */
+const ori7 = (code: string) => `NJ${code}`;
+const ori9 = (code: string) => `NJ${code}00`;
+const plural = (n: number) => `${n} ${n === 1 ? 'agency' : 'agencies'}`;
+---
+<div class="ori-controls">
+    <input type="text" id="oriSearch" class="ori-search"
+           placeholder="Search by agency, town, or code (e.g. Irvington, NJ00713)"
+           autocomplete="off" aria-label="Search agencies and ORI codes" />
+    <select id="oriCounty" class="ori-county-select" aria-label="Filter by county">
+        <option value="">All {totals.counties} counties</option>
+        {counties.map((c) => (
+            <option value={c.name}>{c.name} ({c.agencies.length})</option>
+        ))}
+    </select>
+    <span class="ori-count" id="oriCount" role="status" aria-live="polite"></span>
+</div>
+
+{/* Rendered at build time so the whole directory is indexable and works
+    without JavaScript; the script only filters and copies. */}
+<div id="oriList" data-total-agencies={totals.agencies} data-total-counties={totals.counties}>
+    {counties.map((county) => (
+        <section class="ori-county" data-county={county.name}>
+            <div class="ori-county-head">
+                <h3>{county.name}</h3>
+                <span class="ori-fips ori-mono">FIPS {county.fips}</span>
+                <span class="ori-tally" data-total={county.agencies.length}>
+                    {plural(county.agencies.length)}
+                </span>
+            </div>
+
+            <div class="ori-colhead">
+                <span>Agency</span>
+                <span>ORI7 &mdash; short</span>
+                <span class="col-9">ORI9 &mdash; standard</span>
+            </div>
+
+            {county.agencies.map((agency) => (
+                <div class="ori-row"
+                     data-match={`${agency.name} ${ori7(agency.code)} ${ori9(agency.code)}`.toUpperCase()}>
+                    <div class="ori-agency">{agency.name}</div>
+                    <button type="button" class="ori-chip chip-7" data-code={ori7(agency.code)}
+                            title={`Copy ORI7 — ${ori7(agency.code)}`}>
+                        <span class="chip-kind">ORI7</span>{ori7(agency.code)}
+                    </button>
+                    <button type="button" class="ori-chip chip-9" data-code={ori9(agency.code)}
+                            title={`Copy ORI9 — ${ori9(agency.code)}`}>
+                        <span class="chip-kind">ORI9</span>{ori9(agency.code)}
+                    </button>
+                </div>
+            ))}
+        </section>
+    ))}
+</div>

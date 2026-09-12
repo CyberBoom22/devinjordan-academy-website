@@ -1,0 +1,47 @@
+---
+import BaseLayout from '@layouts/BaseLayout.astro';
+import PageBanner from '@components/PageBanner.astro';
+import { getSiteSettings } from '@lib/content';
+
+const site = await getSiteSettings();
+const phone = site.contacts.find((c) => c.href?.startsWith('tel:'));
+---
+<BaseLayout title="Page not found — Devin Jordan Security Training Academy"
+            description="That page could not be found."
+            noindex={true}>
+
+    <PageBanner
+        eyebrow="ERROR 404"
+        title="PAGE NOT"
+        titleAccent="FOUND"
+        lede="That page has moved, been renamed, or never existed. The links below will get you back on course."
+    />
+
+    <div class="about-page-wrap notfound-actions">
+        <div class="cta-actions">
+            <a href="/" class="btn">RETURN HOME</a>
+            <a href="/#contact" class="btn btn-ghost">CONTACT ACADEMY</a>
+        </div>
+        {phone && (
+            <p class="notfound-help">
+                Looking for a course or your ORI code? Call the academy at
+                {' '}<a href={phone.href}>{phone.label}</a>.
+            </p>
+        )}
+    </div>
+
+</BaseLayout>
+
+<style>
+    .notfound-actions { text-align: center; }
+    .notfound-help {
+        margin-top: 32px;
+        color: var(--text-muted);
+    }
+    .notfound-help a {
+        color: var(--accent);
+        text-decoration: none;
+        border-bottom: 1px solid rgba(197, 160, 89, 0.35);
+    }
+    .notfound-help a:hover { border-bottom-color: var(--accent); }
+</style>

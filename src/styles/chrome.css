@@ -1,0 +1,348 @@
+/* ==========================================================================
+   Persistent site chrome: navigation, brand logo, loading screen, find bar.
+   ========================================================================== */
+
+/* --- NAVIGATION --- */
+nav {
+    position: fixed;
+    top: 0;
+    width: 100%;
+    background: var(--nav-bg);
+    z-index: 1000;
+    border-bottom: 2px solid #2A2A2A;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.5);
+}
+
+.nav-container {
+    height: 90px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 20px;
+    position: relative;
+}
+
+.nav-links {
+    display: flex;
+    gap: 40px;
+    flex: 1 1 0;
+}
+
+/* Equal-flex groups keep the centre gap aligned with the fixed logo
+   even when one side has more tabs than the other. */
+.nav-left { justify-content: flex-end; }
+.nav-right { justify-content: flex-start; }
+
+.nav-links a {
+    white-space: nowrap;
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 700;
+    font-family: var(--font-heading);
+    letter-spacing: 2px;
+    padding: 6px 0;
+    border-bottom: 2px solid transparent;
+    transition: color 0.3s, border-color 0.3s;
+}
+
+.nav-links a:hover { color: var(--accent); }
+
+.nav-links a.active {
+    color: var(--accent);
+    border-bottom-color: var(--primary);
+}
+
+/* Reserves the centre gap for the fixed logo; shrinks with it on scroll */
+.logo-spacer {
+    width: 200px;
+    flex-shrink: 0;
+    transition: width 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+nav.scrolled .logo-spacer { width: 130px; }
+
+.nav-toggle {
+    display: none;
+    background: transparent;
+    border: 1px solid var(--hairline);
+    color: var(--accent);
+    font-size: 1.1rem;
+    padding: 10px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.mobile-menu {
+    display: none;
+    flex-direction: column;
+    background: var(--nav-bg);
+    border-top: 1px solid var(--hairline);
+}
+
+.mobile-menu.open { display: flex; }
+
+.mobile-menu a {
+    padding: 16px 24px;
+    color: var(--text-muted);
+    text-decoration: none;
+    font-family: var(--font-heading);
+    font-weight: 700;
+    letter-spacing: 2px;
+    font-size: 0.85rem;
+    border-bottom: 1px solid #16181C;
+}
+
+.mobile-menu a.active { color: var(--accent); }
+
+/* --- LOADING SCREEN --- */
+#preloader {
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    background: var(--bg-dark);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 26px;
+    padding: 20px;
+    opacity: 1;
+    visibility: visible;
+    transition: opacity 0.6s ease, visibility 0s linear 0.6s;
+    /* Failsafe: if the load event never fires (or JS is off), the
+       screen still clears itself rather than trapping the visitor. */
+    animation: preloaderFailsafe 0.6s ease 8s forwards;
+}
+
+#preloader.is-done {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    animation: none;
+}
+
+@keyframes preloaderFailsafe {
+    to { opacity: 0; visibility: hidden; }
+}
+
+.preloader-logo {
+    width: min(240px, 55vw);
+    height: auto;
+    display: block;
+    border-radius: 4px;
+    filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.85));
+    animation: preloaderBreathe 2.2s ease-in-out infinite;
+}
+
+@keyframes preloaderBreathe {
+    0%, 100% { transform: scale(1); opacity: 0.88; }
+    50%      { transform: scale(1.045); opacity: 1; }
+}
+
+/* Sweep of gold across a maroon rail */
+.preloader-bar {
+    width: min(260px, 60vw);
+    height: 2px;
+    background: rgba(155, 27, 27, 0.45);
+    border-radius: 2px;
+    overflow: hidden;
+    position: relative;
+}
+
+.preloader-bar::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    width: 40%;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    animation: preloaderSweep 1.4s ease-in-out infinite;
+}
+
+@keyframes preloaderSweep {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(350%); }
+}
+
+.preloader-text {
+    font-family: var(--font-heading);
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .preloader-logo { animation: none; opacity: 1; }
+    .preloader-bar::after { animation: none; width: 100%; }
+}
+
+/* --- DYNAMIC LOGO EFFECT --- */
+.brand-logo-container {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    top: 15px;
+    z-index: 1001;
+    transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+    pointer-events: auto;
+    text-decoration: none;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.brand-logo-container img {
+    height: 140px;
+    width: auto;
+    display: block;
+    border-radius: 4px;
+    transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+    filter: drop-shadow(0 10px 15px rgba(0,0,0,0.8));
+}
+
+.brand-logo-container.scrolled { top: 10px; }
+
+.brand-logo-container.scrolled img {
+    height: 70px;
+    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.5));
+}
+
+/* --- FIND IN PAGE --- */
+.nav-search-btn {
+    position: absolute;
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.05rem;
+    cursor: pointer;
+    padding: 8px 10px;
+    transition: color 0.3s;
+}
+
+.nav-search-btn:hover { color: var(--accent); }
+
+.find-bar {
+    position: fixed;
+    top: 90px;
+    left: 0;
+    right: 0;
+    z-index: 999;
+    background: var(--nav-bg);
+    border-bottom: 2px solid #2A2A2A;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+    display: none;
+}
+
+.find-bar.open { display: block; }
+
+.find-bar-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 12px 20px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.find-bar-inner > i { color: var(--accent); }
+
+.find-bar input {
+    flex: 1;
+    min-width: 0;
+    padding: 10px 14px;
+    background: var(--bg-dark);
+    border: 1px solid #444;
+    color: white;
+    font-family: var(--font-body);
+    border-radius: 2px;
+    transition: border-color 0.3s;
+}
+
+.find-bar input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.find-count {
+    color: var(--text-muted);
+    font-family: var(--font-heading);
+    font-weight: 700;
+    font-size: 0.8rem;
+    letter-spacing: 1px;
+    white-space: nowrap;
+    min-width: 58px;
+    text-align: center;
+}
+
+.find-nav-btn {
+    background: transparent;
+    border: 1px solid #444;
+    color: var(--accent);
+    width: 38px;
+    height: 38px;
+    border-radius: 2px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 0.3s;
+}
+
+.find-nav-btn:hover {
+    border-color: var(--accent);
+    background: rgba(197, 160, 89, 0.1);
+}
+
+mark.find-hit {
+    background: rgba(197, 160, 89, 0.4);
+    color: inherit;
+    padding: 0 1px;
+    border-radius: 2px;
+}
+
+mark.find-hit.current {
+    background: var(--primary);
+    color: #fff;
+    box-shadow: 0 0 0 2px rgba(155, 27, 27, 0.45);
+}
+
+/* --- FOOTER --- */
+footer {
+    text-align: center;
+    padding: 40px 20px;
+    background: #050608;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    border-top: 1px solid #111;
+}
+
+footer a { color: var(--text-muted); text-decoration: none; }
+footer a:hover { color: var(--accent); }
+
+/* Replaces inline style="height:74px;width:auto;..." on the footer logo */
+.footer-logo {
+    height: 74px;
+    width: auto;
+    max-width: 90%;
+    object-fit: contain;
+    margin-bottom: 22px;
+}
+
+/* Replaces inline style="margin-top:5px;color:#555;" on the footer address */
+.footer-address {
+    margin-top: 5px;
+    color: #555;
+}
+
+/* Visible keyboard focus */
+a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+}

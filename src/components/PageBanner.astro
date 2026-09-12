@@ -1,0 +1,21 @@
+---
+interface Props {
+    eyebrow: string;
+    /** Rendered before the highlighted span */
+    title: string;
+    /** Rendered inside a span, in the signature maroon */
+    titleAccent: string;
+    lede: string;
+    /** Banners on inner pages animate in; the About page keeps the stagger. */
+    animate?: boolean;
+}
+const { eyebrow, title, titleAccent, lede, animate = false } = Astro.props;
+---
+<header class="page-banner">
+    <span class={animate ? 'eyebrow anim-enter-up' : 'eyebrow'}>{eyebrow}</span>
+    <h1 class={animate ? 'anim-enter-up delay-1' : undefined}>
+        {title} <span>{titleAccent}</span>
+    </h1>
+    <div class="banner-rule"></div>
+    <p class={animate ? 'anim-enter-up delay-2' : undefined}>{lede}</p>
+</header>
