@@ -1,0 +1,334 @@
+---
+/**
+ * Fixed header.
+ *
+ * The logo is a separately positioned fixed element rather than a flex child,
+ * because it overhangs the bar and shrinks on scroll. The bar reserves space
+ * for it with .logo-spacer, and the two link groups use equal flex so the gap
+ * stays centred even though the left group has three links and the right has
+ * three of different widths.
+ */
+const NAV_LEFT = [
+  { href: '/', label: 'Home' },
+  { href: '/about', label: 'About' },
+  { href: '/news', label: 'News' },
+];
+
+const NAV_RIGHT = [
+  { href: '/#services', label: 'Services' },
+  { href: '/ori', label: 'ORI' },
+  { href: '/#contact', label: 'Contact' },
+];
+
+const path = Astro.url.pathname.replace(/\/$/, '') || '/';
+
+function isActive(href: string): boolean {
+  if (href.includes('#')) return false;
+  return href === '/' ? path === '/' : path === href;
+}
+
+const allLinks = [...NAV_LEFT, ...NAV_RIGHT];
+---
+
+<nav id="siteNav" aria-label="Primary">
+  <div class="nav-container">
+    <div class="nav-links nav-left">
+      {
+        NAV_LEFT.map((link) => (
+          <a
+            href={link.href}
+            class:list={[{ active: isActive(link.href) }]}
+            aria-current={isActive(link.href) ? 'page' : undefined}
+          >
+            {link.label}
+          </a>
+        ))
+      }
+    </div>
+
+    {/* Reserves the centre gap for the fixed logo; shrinks with it on scroll. */}
+    <div class="logo-spacer"></div>
+
+    <div class="nav-links nav-right">
+      {
+        NAV_RIGHT.map((link) => (
+          <a
+            href={link.href}
+            class:list={[{ active: isActive(link.href) }]}
+            aria-current={isActive(link.href) ? 'page' : undefined}
+          >
+            {link.label}
+          </a>
+        ))
+      }
+    </div>
+
+    <button
+      class="nav-search-btn"
+      id="findToggle"
+      aria-label="Search this site"
+      aria-expanded="false"
+      aria-controls="findBar"
+    >
+      <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+    </button>
+
+    <button
+      class="nav-toggle"
+      id="navToggle"
+      aria-label="Open menu"
+      aria-expanded="false"
+      aria-controls="mobileMenu"
+    >
+      <i class="fa-solid fa-bars" aria-hidden="true"></i>
+    </button>
+  </div>
+
+  <div class="mobile-menu" id="mobileMenu">
+    {
+      allLinks.map((link) => (
+        <a href={link.href} class:list={[{ active: isActive(link.href) }]}>
+          {link.label === 'ORI' ? 'ORI Lookup' : link.label}
+        </a>
+      ))
+    }
+  </div>
+</nav>
+
+<a
+  href="/"
+  class="brand-logo-container"
+  id="brandLogo"
+  aria-label="Devin Jordan Security Training Academy — home"
+>
+  <img
+    src="/img/logo.webp"
+    alt="Devin Jordan Security Training Academy"
+    width="240"
+    height="140"
+    fetchpriority="high"
+  />
+</a>
+
+<style>
+  nav {
+    position: fixed;
+    top: 0;
+    width: 100%;
+    background: var(--nav-bg);
+    z-index: 1000;
+    border-bottom: 2px solid #2a2a2a;
+    box-shadow: var(--shadow-nav);
+  }
+
+  .nav-container {
+    height: var(--nav-height);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    max-width: var(--wrap);
+    margin: 0 auto;
+    padding: 0 20px;
+    position: relative;
+  }
+
+  .nav-links {
+    display: flex;
+    gap: 40px;
+    flex: 1 1 0;
+  }
+
+  /* Equal-flex groups keep the centre gap aligned with the fixed logo even
+     when one side's links are wider than the other's. */
+  .nav-left {
+    justify-content: flex-end;
+  }
+
+  .nav-right {
+    justify-content: flex-start;
+  }
+
+  .nav-links a {
+    white-space: nowrap;
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 700;
+    font-family: var(--font-heading);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    padding: 6px 0;
+    border-bottom: 2px solid transparent;
+    transition:
+      color 0.3s,
+      border-color 0.3s;
+  }
+
+  .nav-links a:hover {
+    color: var(--accent);
+  }
+
+  .nav-links a.active {
+    color: var(--accent);
+    border-bottom-color: var(--primary);
+  }
+
+  .logo-spacer {
+    width: 200px;
+    flex-shrink: 0;
+    transition: width 0.4s var(--ease-out);
+  }
+
+  nav.scrolled .logo-spacer {
+    width: 130px;
+  }
+
+  .nav-toggle {
+    display: none;
+    background: transparent;
+    border: 1px solid var(--hairline);
+    color: var(--accent);
+    font-size: 1.1rem;
+    padding: 10px 14px;
+    border-radius: var(--radius);
+    cursor: pointer;
+  }
+
+  .nav-search-btn {
+    position: absolute;
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.05rem;
+    cursor: pointer;
+    padding: 8px 10px;
+    transition: color 0.3s;
+  }
+
+  .nav-search-btn:hover {
+    color: var(--accent);
+  }
+
+  .mobile-menu {
+    display: none;
+    flex-direction: column;
+    background: var(--nav-bg);
+    border-top: 1px solid var(--hairline);
+  }
+
+  .mobile-menu.open {
+    display: flex;
+  }
+
+  .mobile-menu a {
+    padding: 16px 24px;
+    color: var(--text-muted);
+    text-decoration: none;
+    font-family: var(--font-heading);
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    font-size: 0.85rem;
+    border-bottom: 1px solid #16181c;
+  }
+
+  .mobile-menu a.active {
+    color: var(--accent);
+  }
+
+  /* --- Fixed brand logo --------------------------------------------------- */
+  .brand-logo-container {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    top: 15px;
+    z-index: 1001;
+    transition: top 0.4s var(--ease-out);
+    text-decoration: none;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .brand-logo-container img {
+    height: 140px;
+    width: auto;
+    display: block;
+    border-radius: var(--radius);
+    transition:
+      height 0.4s var(--ease-out),
+      filter 0.4s var(--ease-out);
+    filter: drop-shadow(0 10px 15px rgba(0, 0, 0, 0.8));
+  }
+
+  .brand-logo-container.scrolled {
+    top: 10px;
+  }
+
+  .brand-logo-container.scrolled img {
+    height: 70px;
+    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.5));
+  }
+
+  @media (max-width: 1050px) {
+    .nav-links {
+      gap: 26px;
+    }
+
+    .nav-links a {
+      font-size: 0.82rem;
+      letter-spacing: 1px;
+    }
+
+    .logo-spacer {
+      width: 160px;
+    }
+
+    nav.scrolled .logo-spacer {
+      width: 120px;
+    }
+  }
+
+  @media (max-width: 900px) {
+    .nav-links {
+      display: none;
+    }
+
+    .logo-spacer,
+    nav.scrolled .logo-spacer {
+      width: 90px;
+    }
+
+    .nav-toggle {
+      display: block;
+      position: absolute;
+      left: 20px;
+      top: 50%;
+      transform: translateY(-50%);
+    }
+
+    .nav-container {
+      justify-content: center;
+    }
+
+    .brand-logo-container {
+      top: 10px;
+    }
+
+    .brand-logo-container img {
+      height: 70px;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .brand-logo-container,
+    .brand-logo-container img,
+    .logo-spacer {
+      transition: none;
+    }
+  }
+</style>

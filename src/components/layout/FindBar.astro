@@ -1,0 +1,111 @@
+---
+/**
+ * Find-in-page bar.
+ *
+ * The original site was a single document with hidden pages, so its search
+ * could walk every page at once. Now each page is a real document, so this
+ * searches the current page only — the honest behaviour for a multi-page site,
+ * and the reason the placeholder no longer promises to search "this site".
+ */
+---
+
+<div class="find-bar" id="findBar">
+  <div class="find-bar-inner">
+    <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+    <input
+      type="text"
+      id="findInput"
+      placeholder="Find on this page… (e.g. SORA, CPR, ORI)"
+      autocomplete="off"
+      aria-label="Find on this page"
+    />
+    <span class="find-count" id="findCount" role="status" aria-live="polite"></span>
+    <button class="find-nav-btn" id="findPrev" aria-label="Previous match">
+      <i class="fa-solid fa-chevron-up" aria-hidden="true"></i>
+    </button>
+    <button class="find-nav-btn" id="findNext" aria-label="Next match">
+      <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+    </button>
+    <button class="find-nav-btn" id="findClose" aria-label="Close search">
+      <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+    </button>
+  </div>
+</div>
+
+<style>
+  .find-bar {
+    position: fixed;
+    top: var(--nav-height);
+    left: 0;
+    right: 0;
+    z-index: 999;
+    background: var(--nav-bg);
+    border-bottom: 2px solid #2a2a2a;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+    display: none;
+  }
+
+  .find-bar.open {
+    display: block;
+  }
+
+  .find-bar-inner {
+    max-width: var(--wrap);
+    margin: 0 auto;
+    padding: 12px 20px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .find-bar-inner > i {
+    color: var(--accent);
+  }
+
+  .find-bar input {
+    flex: 1;
+    min-width: 0;
+    padding: 10px 14px;
+    background: var(--bg-dark);
+    border: 1px solid var(--border-input);
+    color: var(--text-bright);
+    font-family: var(--font-body);
+    border-radius: var(--radius-sm);
+    transition: border-color 0.3s;
+  }
+
+  .find-bar input:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  .find-count {
+    color: var(--text-muted);
+    font-family: var(--font-heading);
+    font-weight: 700;
+    font-size: 0.8rem;
+    letter-spacing: 1px;
+    white-space: nowrap;
+    min-width: 58px;
+    text-align: center;
+  }
+
+  .find-nav-btn {
+    background: transparent;
+    border: 1px solid var(--border-input);
+    color: var(--accent);
+    width: 38px;
+    height: 38px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition:
+      border-color 0.3s,
+      background 0.3s;
+  }
+
+  .find-nav-btn:hover {
+    border-color: var(--accent);
+    background: rgba(197, 160, 89, 0.1);
+  }
+</style>

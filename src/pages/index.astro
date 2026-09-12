@@ -1,0 +1,47 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Hero from '../components/home/Hero.astro';
+import AboutTeaser from '../components/home/AboutTeaser.astro';
+import ServicesSection from '../components/home/ServicesSection.astro';
+import ContactSection from '../components/home/ContactSection.astro';
+import { getCopy, getCourseCategories, getSettings } from '../lib/content/repository';
+import { contactMethods } from '../lib/seed/site';
+
+const { supabase } = Astro.locals;
+const [copy, settings, categories] = await Promise.all([
+  getCopy(supabase),
+  getSettings(supabase),
+  getCourseCategories(supabase),
+]);
+
+const methods = contactMethods(settings);
+---
+
+<BaseLayout description={settings['site.description']} bareTitle>
+  <Hero
+    line1={copy['home.hero.line1'] ?? ''}
+    line2={copy['home.hero.line2'] ?? ''}
+    line3={copy['home.hero.line3'] ?? ''}
+    subheading={copy['home.hero.subheading'] ?? ''}
+    ctaLabel={copy['home.hero.cta'] ?? 'Explore Courses'}
+  />
+
+  <AboutTeaser
+    heading={copy['home.about.heading'] ?? ''}
+    subheading={copy['home.about.subheading'] ?? ''}
+    body={copy['home.about.body'] ?? ''}
+    ctaLabel={copy['home.about.cta'] ?? 'Meet the Academy'}
+  />
+
+  <ServicesSection
+    heading={copy['home.services.heading'] ?? ''}
+    subheading={copy['home.services.subheading'] ?? ''}
+    categories={categories}
+  />
+
+  <ContactSection
+    heading={copy['home.contact.heading'] ?? ''}
+    subheading={copy['home.contact.subheading'] ?? ''}
+    methods={methods}
+  />
+</BaseLayout>

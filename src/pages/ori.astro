@@ -1,0 +1,69 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import PageBanner from '../components/ui/PageBanner.astro';
+import StatStrip from '../components/ui/StatStrip.astro';
+import SectionHead from '../components/ui/SectionHead.astro';
+import PillarGrid from '../components/ui/PillarGrid.astro';
+import OriCompare from '../components/ori/OriCompare.astro';
+import OriDirectory from '../components/ori/OriDirectory.astro';
+import Disclaimer from '../components/ui/Disclaimer.astro';
+import CtaBand from '../components/ui/CtaBand.astro';
+import { getCopy, getOriCounties } from '../lib/content/repository';
+import { SEED_ORI_PILLARS } from '../lib/seed/ori';
+
+const { supabase } = Astro.locals;
+const [copy, counties] = await Promise.all([getCopy(supabase), getOriCounties(supabase)]);
+
+// Every figure in the stat strip is summed from the directory below it, so the
+// page can never disagree with the data it is displaying.
+const totalAgencies = counties.reduce((sum, county) => sum + county.agencies.length, 0);
+
+const stats = [
+  { id: 'counties', value: String(counties.length), label: 'Counties covered' },
+  { id: 'agencies', value: String(totalAgencies), label: 'Agencies listed' },
+  { id: 'formats', value: '2', label: 'Code formats — ORI7 & ORI9' },
+];
+---
+
+<BaseLayout
+  title="New Jersey ORI Directory"
+  description="Every New Jersey police department, county sheriff, prosecutor's office and State Police station, with both ORI codes used to route fingerprint-based background checks."
+>
+  <PageBanner
+    eyebrow="Originating agency identifiers"
+    heading="New Jersey {{ORI}} Directory"
+    intro="Every municipal police department, county sheriff, prosecutor's office and State Police station in New Jersey — with both ORI codes used to route fingerprint-based background checks to the right agency."
+  />
+
+  <div class="ori-wrap">
+    <StatStrip stats={stats} />
+
+    <SectionHead heading="ORI7 {{vs.}} ORI9" />
+    <OriCompare />
+
+    <SectionHead heading="Working with {{ORI Codes}}" />
+    <PillarGrid pillars={SEED_ORI_PILLARS} />
+
+    <SectionHead heading="Agency {{Lookup}}" />
+    <OriDirectory counties={counties} />
+
+    <Disclaimer headline="Verify before you file." body={copy['ori.disclaimer'] ?? ''} />
+  </div>
+
+  <CtaBand
+    heading="Need help with your paperwork?"
+    body="Our instructors walk every student through fingerprinting and the state application process."
+  />
+</BaseLayout>
+
+<script>
+  import '../scripts/ori';
+</script>
+
+<style>
+  .ori-wrap {
+    max-width: var(--wrap);
+    margin: 0 auto;
+    padding: 90px 20px;
+  }
+</style>

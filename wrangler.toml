@@ -11,3 +11,11 @@ assets = { directory = "./dist", binding = "ASSETS" }
 # dashboard for deployed environments.
 [vars]
 PUBLIC_SITE_URL = "https://devinjordansecuritytrainingacademy.com"
+
+# Astro's session API is backed by Workers KV. This project does not use it —
+# auth state lives in Supabase cookies — so no namespace is required. If a
+# future feature calls Astro.session, create one and bind it here:
+#   wrangler kv namespace create SESSION
+# [[kv_namespaces]]
+# binding = "SESSION"
+# id = "<id printed by the command above>"

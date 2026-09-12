@@ -1,0 +1,33 @@
+---
+interface Props {
+  /** Short, shouted lead-in, e.g. "Informational only — not legal advice." */
+  headline: string;
+  body: string;
+}
+
+const { headline, body } = Astro.props;
+---
+
+<aside class="disclaimer">
+  <strong>{headline}</strong>
+  {body}
+</aside>
+
+<style>
+  .disclaimer {
+    margin-top: 40px;
+    padding: 22px 26px;
+    border: 1px solid var(--hairline);
+    border-left: 3px solid var(--accent);
+    border-radius: var(--radius);
+    background: rgba(197, 160, 89, 0.06);
+    color: var(--text-muted);
+    font-size: 0.88rem;
+  }
+
+  .disclaimer strong {
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-right: 0.4em;
+  }
+</style>

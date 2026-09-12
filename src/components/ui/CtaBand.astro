@@ -1,0 +1,62 @@
+---
+interface Props {
+  heading: string;
+  body: string;
+  primaryLabel?: string;
+  primaryHref?: string;
+  secondaryLabel?: string;
+  secondaryHref?: string;
+}
+
+const {
+  heading,
+  body,
+  primaryLabel = 'View Courses',
+  primaryHref = '/#services',
+  secondaryLabel = 'Contact Academy',
+  secondaryHref = '/#contact',
+} = Astro.props;
+---
+
+<section class="cta-band">
+  <h2>{heading}</h2>
+  <p>{body}</p>
+  <div class="cta-actions">
+    <a href={primaryHref} class="btn">{primaryLabel}</a>
+    <a href={secondaryHref} class="btn btn-ghost">{secondaryLabel}</a>
+  </div>
+</section>
+
+<style>
+  .cta-band {
+    background: var(--nav-bg);
+    border-top: 1px solid var(--hairline);
+    border-bottom: 1px solid var(--hairline);
+    padding: 70px 20px;
+    text-align: center;
+  }
+
+  .cta-band h2 {
+    font-size: 2.2rem;
+    color: var(--text-bright);
+    margin-bottom: 12px;
+  }
+
+  .cta-band p {
+    color: var(--text-muted);
+    margin-bottom: 30px;
+  }
+
+  .cta-actions {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  @media (max-width: 900px) {
+    .cta-band h2 {
+      font-size: 1.7rem;
+    }
+  }
+</style>

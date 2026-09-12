@@ -1,0 +1,122 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import PageBanner from '../components/ui/PageBanner.astro';
+import StatStrip from '../components/ui/StatStrip.astro';
+import SectionHead from '../components/ui/SectionHead.astro';
+import PillarGrid from '../components/ui/PillarGrid.astro';
+import Dossier from '../components/about/Dossier.astro';
+import Creed from '../components/about/Creed.astro';
+import CtaBand from '../components/ui/CtaBand.astro';
+import { getCopy, getInstructors, getPillars, getStats } from '../lib/content/repository';
+import { paragraphs, renderCopy } from '../lib/format';
+
+const { supabase } = Astro.locals;
+const [copy, stats, pillars, instructors] = await Promise.all([
+  getCopy(supabase),
+  getStats(supabase, 'about'),
+  getPillars(supabase, 'about'),
+  getInstructors(supabase),
+]);
+---
+
+<BaseLayout
+  title="About the Academy"
+  description="Armed and unarmed SORA certification across Northern, Central, and Southern New Jersey — and now serving New York."
+>
+  <PageBanner
+    eyebrow="Devin Jordan Security Training Academy"
+    heading="Welcome to {{The Academy}}"
+    intro="Armed and unarmed SORA certification across Northern, Central, and Southern New Jersey — and now serving New York."
+  />
+
+  <div class="about-page-wrap">
+    <StatStrip stats={stats} />
+
+    <div class="about-grid">
+      <div class="about-text anim-hard-left">
+        <h2 set:html={renderCopy(copy['about.intro.heading'] ?? '')} />
+        <h3>{copy['about.intro.subheading']}</h3>
+        {paragraphs(copy['about.intro.body']).map((paragraph) => <p>{paragraph}</p>)}
+      </div>
+      <div class="about-image anim-hard-right">
+        <img
+          src="/img/crest-seal.svg"
+          alt="Academy seal: Train, Qualify, Protect"
+          width="800"
+          height="672"
+          loading="lazy"
+        />
+      </div>
+    </div>
+
+    <SectionHead heading={copy['about.pillars.heading'] ?? ''} />
+    <PillarGrid pillars={pillars} />
+
+    <SectionHead heading={copy['about.leadership.heading'] ?? ''} />
+    {instructors.map((instructor) => <Dossier instructor={instructor} />)}
+
+    <Creed text={copy['about.creed'] ?? ''} />
+  </div>
+
+  <CtaBand
+    heading="Ready to get certified?"
+    body="Classes run statewide. Tell us which course you need and we'll get you scheduled."
+  />
+</BaseLayout>
+
+<style>
+  .about-page-wrap {
+    max-width: var(--wrap);
+    margin: 0 auto;
+    padding: 90px 20px;
+    overflow: hidden;
+  }
+
+  .about-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 50px;
+    align-items: center;
+    margin-bottom: 90px;
+  }
+
+  .about-text h2 {
+    font-size: 3rem;
+    color: var(--primary);
+    margin-bottom: 10px;
+    line-height: 1.1;
+  }
+
+  .about-text h3 {
+    font-size: 1.2rem;
+    color: var(--accent);
+    margin-bottom: 25px;
+    letter-spacing: 2px;
+  }
+
+  .about-text p {
+    color: var(--text-muted);
+    margin-bottom: 20px;
+    font-size: 1.05rem;
+  }
+
+  .about-image img {
+    width: 100%;
+    height: auto;
+    display: block;
+    border-radius: var(--radius);
+    border: 2px solid var(--border-card);
+    box-shadow: var(--shadow-image);
+    background: var(--bg-deep);
+  }
+
+  @media (max-width: 900px) {
+    .about-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .about-text h2 {
+      font-size: 2.2rem;
+    }
+  }
+</style>

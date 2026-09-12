@@ -1,0 +1,57 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import PageBanner from '../components/ui/PageBanner.astro';
+import NewsBoard from '../components/news/NewsBoard.astro';
+import Disclaimer from '../components/ui/Disclaimer.astro';
+import {
+  getCopy,
+  getJurisdictions,
+  getNewsItems,
+  isNewsFeedReady,
+} from '../lib/content/repository';
+
+const { supabase } = Astro.locals;
+const [copy, jurisdictions, items, feedReady] = await Promise.all([
+  getCopy(supabase),
+  getJurisdictions(supabase),
+  getNewsItems(supabase),
+  isNewsFeedReady(supabase),
+]);
+---
+
+<BaseLayout
+  title="News & Legislation"
+  description="Current firearm legislation and court decisions affecting security professionals in New Jersey, New York and at federal level."
+>
+  <PageBanner
+    eyebrow="Firearm law & policy tracker"
+    heading="News & {{Legislation}}"
+    intro="Current firearm legislation and court decisions affecting security professionals, organized by state."
+  />
+
+  <NewsBoard
+    jurisdictions={jurisdictions}
+    items={items}
+    feedReady={feedReady}
+    updatedAt={new Date()}
+  />
+
+  <div class="news-disclaimer-wrap">
+    <Disclaimer
+      headline="Informational only — not legal advice."
+      body={copy['news.disclaimer'] ?? ''}
+    />
+  </div>
+</BaseLayout>
+
+<script>
+  import '../scripts/news';
+</script>
+
+<style>
+  .news-disclaimer-wrap {
+    max-width: var(--wrap-narrow);
+    margin: 0 auto;
+    padding: 0 20px 90px 20px;
+  }
+</style>

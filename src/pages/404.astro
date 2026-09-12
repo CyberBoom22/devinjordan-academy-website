@@ -1,0 +1,68 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import PageBanner from '../components/ui/PageBanner.astro';
+import CtaBand from '../components/ui/CtaBand.astro';
+---
+
+<BaseLayout title="Page not found" description="That page could not be found.">
+  <PageBanner
+    eyebrow="Error 404"
+    heading="Page {{Not Found}}"
+    intro="That page has moved or never existed. The links below cover everything on the site."
+  />
+
+  <div class="notfound-wrap">
+    <ul class="notfound-links">
+      <li><a href="/">Home</a></li>
+      <li><a href="/about">About the academy</a></li>
+      <li><a href="/#services">Courses &amp; tuition</a></li>
+      <li><a href="/news">News &amp; legislation</a></li>
+      <li><a href="/ori">ORI directory</a></li>
+      <li><a href="/#contact">Contact</a></li>
+    </ul>
+  </div>
+
+  <CtaBand
+    heading="Looking for a course?"
+    body="Call the academy and we'll point you at the right one."
+  />
+</BaseLayout>
+
+<style>
+  .notfound-wrap {
+    max-width: var(--wrap-narrow);
+    margin: 0 auto;
+    padding: 70px 20px 90px 20px;
+  }
+
+  .notfound-links {
+    list-style: none;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+    gap: 1px;
+    background: var(--hairline);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+  }
+
+  .notfound-links a {
+    display: block;
+    background: var(--bg-card);
+    padding: 24px 26px;
+    color: var(--text-main);
+    text-decoration: none;
+    font-family: var(--font-heading);
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    font-size: 0.85rem;
+    transition:
+      background 0.3s,
+      color 0.3s;
+  }
+
+  .notfound-links a:hover {
+    background: var(--bg-card-hover);
+    color: var(--accent);
+  }
+</style>

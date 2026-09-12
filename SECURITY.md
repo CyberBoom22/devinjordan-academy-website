@@ -28,7 +28,7 @@ before we have had a chance to fix it.
 **Self-hosted assets.** Every stylesheet, script, font, and icon the page needs
 is served from this repository. There are no requests to Google Fonts, cdnjs, or
 any other third-party origin, so no outside party can see who visits the site or
-change what the site serves. The one exception is noted under *Known gaps* below.
+change what the site serves. The one exception is noted under _Known gaps_ below.
 
 **Content Security Policy.** Every page carries a strict CSP `<meta>` tag that
 limits the browser to loading resources from this origin only:
@@ -81,12 +81,12 @@ GitHub Pages serves static files and does not let a repository set custom HTTP
 response headers. There is no `.htaccess`, no `_headers` file, and no server-side
 configuration. As a result the following **cannot** be set from this repository:
 
-| Protection | Why it needs a header |
-| --- | --- |
-| `Content-Security-Policy: frame-ancestors` | Ignored in a `<meta>` tag; only valid as a header. The JavaScript framing check above is the partial substitute. |
-| `X-Frame-Options` | Header-only. Same gap as `frame-ancestors`. |
-| `X-Content-Type-Options` | Header-only. GitHub Pages happens to send it, but the repository cannot control or guarantee it. |
-| `Permissions-Policy` | Header-only. Camera, microphone, geolocation and similar features cannot be switched off from here. |
+| Protection                                                                     | Why it needs a header                                                                                                                                                                               |
+| ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Content-Security-Policy: frame-ancestors`                                     | Ignored in a `<meta>` tag; only valid as a header. The JavaScript framing check above is the partial substitute.                                                                                    |
+| `X-Frame-Options`                                                              | Header-only. Same gap as `frame-ancestors`.                                                                                                                                                         |
+| `X-Content-Type-Options`                                                       | Header-only. GitHub Pages happens to send it, but the repository cannot control or guarantee it.                                                                                                    |
+| `Permissions-Policy`                                                           | Header-only. Camera, microphone, geolocation and similar features cannot be switched off from here.                                                                                                 |
 | `Strict-Transport-Security` (custom `max-age`, `includeSubDomains`, `preload`) | Header-only. GitHub Pages sends its own HSTS header for `*.github.io`; for a custom domain it sends one once **Enforce HTTPS** is enabled in Settings → Pages, but the values are not configurable. |
 
 To set any of these, the site would need a CDN or reverse proxy in front of it

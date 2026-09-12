@@ -109,13 +109,15 @@ export const PERMISSIONS = {
   'page.write': {
     label: 'Edit pages',
     group: 'Pages',
-    description: 'Change the wording of the Home, About, News and ORI pages. Changes stay as drafts until published.',
+    description:
+      'Change the wording of the Home, About, News and ORI pages. Changes stay as drafts until published.',
     defaultRoles: CONTENT_STAFF,
   },
   'page.publish': {
     label: 'Publish pages',
     group: 'Pages',
-    description: 'Make page edits visible to the public. Separate from editing so drafts can be reviewed first.',
+    description:
+      'Make page edits visible to the public. Separate from editing so drafts can be reviewed first.',
     defaultRoles: CONTENT_STAFF,
   },
 
@@ -238,7 +240,8 @@ export const PERMISSIONS = {
   'enquiry.read': {
     label: 'Read course enquiries',
     group: 'Enquiries',
-    description: 'See messages submitted through the contact form, including names and phone numbers.',
+    description:
+      'See messages submitted through the contact form, including names and phone numbers.',
     defaultRoles: ALL_STAFF,
   },
   'enquiry.write': {
@@ -286,13 +289,15 @@ export const PERMISSIONS = {
   'settings.write': {
     label: 'Change site settings',
     group: 'Settings',
-    description: 'Update the phone numbers, address and other details shown across every page and in the footer.',
+    description:
+      'Update the phone numbers, address and other details shown across every page and in the footer.',
     defaultRoles: ADMINS,
   },
   'audit.read': {
     label: 'Read the audit log',
     group: 'Settings',
-    description: 'See a record of who changed what and when. Cannot be edited or cleared by anyone.',
+    description:
+      'See a record of who changed what and when. Cannot be edited or cleared by anyone.',
     defaultRoles: ADMINS,
   },
 } as const satisfies Record<string, PermissionDef>;

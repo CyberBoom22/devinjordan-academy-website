@@ -1,0 +1,129 @@
+---
+/**
+ * Loading screen.
+ *
+ * Dismissed by src/scripts/preloader.ts on window load, with two independent
+ * failsafes: a CSS animation and a timeout, either of which clears the screen
+ * on its own. A loading screen that can trap a visitor behind a slow font is
+ * worse than no loading screen at all.
+ */
+interface Props {
+  siteName: string;
+}
+
+const { siteName } = Astro.props;
+---
+
+<div id="preloader" role="status" aria-label="Loading">
+  <img class="preloader-logo" src="/img/logo.webp" alt="" width="240" height="140" />
+  <div class="preloader-bar"></div>
+  <div class="preloader-text">{siteName}</div>
+</div>
+
+<style>
+  #preloader {
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    background: var(--bg-dark);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 26px;
+    padding: 20px;
+    opacity: 1;
+    visibility: visible;
+    transition:
+      opacity 0.6s ease,
+      visibility 0s linear 0.6s;
+    /* Failsafe: if the load event never fires, the screen still clears itself
+       rather than trapping the visitor behind it. */
+    animation: preloader-failsafe 0.6s ease 8s forwards;
+  }
+
+  #preloader.is-done {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    animation: none;
+  }
+
+  @keyframes preloader-failsafe {
+    to {
+      opacity: 0;
+      visibility: hidden;
+    }
+  }
+
+  .preloader-logo {
+    width: min(240px, 55vw);
+    height: auto;
+    display: block;
+    border-radius: var(--radius);
+    filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.85));
+    animation: preloader-breathe 2.2s ease-in-out infinite;
+  }
+
+  @keyframes preloader-breathe {
+    0%,
+    100% {
+      transform: scale(1);
+      opacity: 0.88;
+    }
+    50% {
+      transform: scale(1.045);
+      opacity: 1;
+    }
+  }
+
+  /* Sweep of gold across a maroon rail. */
+  .preloader-bar {
+    width: min(260px, 60vw);
+    height: 2px;
+    background: rgba(155, 27, 27, 0.45);
+    border-radius: 2px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .preloader-bar::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    width: 40%;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    animation: preloader-sweep 1.4s ease-in-out infinite;
+  }
+
+  @keyframes preloader-sweep {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(350%);
+    }
+  }
+
+  .preloader-text {
+    font-family: var(--font-heading);
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    text-align: center;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .preloader-logo {
+      animation: none;
+      opacity: 1;
+    }
+
+    .preloader-bar::after {
+      animation: none;
+      width: 100%;
+    }
+  }
+</style>

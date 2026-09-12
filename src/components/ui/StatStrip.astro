@@ -1,0 +1,63 @@
+---
+import type { Stat } from '../../lib/content/types';
+
+interface Props {
+  stats: Stat[];
+  /** Extra bottom margin on the About page, none in tighter layouts. */
+  spaced?: boolean;
+}
+
+const { stats, spaced = true } = Astro.props;
+---
+
+{
+  stats.length > 0 && (
+    <div class:list={['stat-strip', 'anim-enter-up', { spaced }]}>
+      {stats.map((stat) => (
+        <div class="stat">
+          <div class="stat-num">{stat.value}</div>
+          <span class="stat-label">{stat.label}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+<style>
+  .stat-strip {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+    gap: 1px;
+    background: var(--hairline);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+  }
+
+  .stat-strip.spaced {
+    margin-bottom: 90px;
+  }
+
+  .stat {
+    background: var(--bg-card);
+    padding: 34px 26px;
+    text-align: center;
+  }
+
+  .stat-num {
+    font-family: var(--font-heading);
+    font-size: 2.6rem;
+    font-weight: 900;
+    color: var(--accent);
+    line-height: 1;
+  }
+
+  .stat-label {
+    display: block;
+    margin-top: 10px;
+    font-size: 0.78rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    font-weight: 700;
+  }
+</style>

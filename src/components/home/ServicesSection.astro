@@ -1,0 +1,153 @@
+---
+import type { CourseCategory } from '../../lib/content/types';
+import { formatPrice } from '../../lib/format';
+
+interface Props {
+  heading: string;
+  subheading: string;
+  categories: CourseCategory[];
+}
+
+const { heading, subheading, categories } = Astro.props;
+---
+
+<section id="services" class="services-section">
+  <h2 class="section-title anim-enter-up">{heading}</h2>
+  <p class="section-subtitle anim-enter-up delay-1">{subheading}</p>
+
+  {
+    categories.map((category) => (
+      <div class="services-category anim-snap-up">
+        <h3 class="category-title">
+          {category.icon && <i class={category.icon} aria-hidden="true" />}
+          {category.name}
+        </h3>
+
+        <div class="pricing-grid">
+          {category.courses.map((course) => (
+            <article class="price-card">
+              <div>
+                <h4>{course.name}</h4>
+                <p>{course.description}</p>
+              </div>
+              <div>
+                <div class="price-tag">{formatPrice(course.priceCents, course.priceNote)}</div>
+                <a href="/#contact" class="btn btn-sm">
+                  {course.ctaLabel}
+                </a>
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
+    ))
+  }
+</section>
+
+<style>
+  .services-section {
+    padding: 100px 20px;
+    max-width: var(--wrap);
+    margin: 0 auto;
+    border-top: 1px solid #222;
+  }
+
+  .section-title {
+    text-align: center;
+    font-size: 3rem;
+    margin-bottom: 10px;
+    color: var(--text-bright);
+  }
+
+  .section-subtitle {
+    text-align: center;
+    color: var(--accent);
+    letter-spacing: 2px;
+    font-weight: 700;
+    margin-bottom: 60px;
+  }
+
+  .services-category {
+    margin-bottom: 70px;
+  }
+
+  .services-category:last-child {
+    margin-bottom: 0;
+  }
+
+  .category-title {
+    font-size: 1.8rem;
+    color: var(--primary);
+    border-bottom: 2px solid var(--primary);
+    padding-bottom: 10px;
+    margin-bottom: 30px;
+    letter-spacing: 1px;
+  }
+
+  .category-title i {
+    margin-right: 0.4em;
+  }
+
+  .pricing-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+    gap: 25px;
+  }
+
+  .price-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-card);
+    border-radius: var(--radius);
+    padding: 30px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    position: relative;
+    transition:
+      border-color 0.4s var(--ease-overshoot),
+      transform 0.4s var(--ease-overshoot),
+      box-shadow 0.4s var(--ease-overshoot);
+  }
+
+  .price-card:hover {
+    border-color: var(--accent);
+    transform: translateY(-8px) scale(1.02);
+    box-shadow: var(--shadow-card);
+  }
+
+  .price-card h4 {
+    font-size: 1.3rem;
+    color: var(--text-bright);
+    margin-bottom: 15px;
+  }
+
+  .price-card p {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    margin-bottom: 20px;
+  }
+
+  .price-tag {
+    font-family: var(--font-heading);
+    font-size: 2rem;
+    font-weight: 900;
+    color: var(--accent);
+    margin-bottom: 20px;
+  }
+
+  @media (max-width: 900px) {
+    .section-title {
+      font-size: 2.2rem;
+    }
+
+    .category-title {
+      font-size: 1.4rem;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .price-card:hover {
+      transform: none;
+    }
+  }
+</style>

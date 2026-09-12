@@ -19,13 +19,9 @@ export default defineConfig({
     }),
   ],
   build: {
-    // One stylesheet per page keeps the critical CSS small on a content site
-    // where most visitors only ever load the homepage.
-    inlineStylesheets: 'auto',
-  },
-  vite: {
-    build: {
-      cssMinify: 'lightningcss',
-    },
+    // Never inline stylesheets. An inlined <style> block would force
+    // `style-src 'unsafe-inline'` into the Content Security Policy, and
+    // keeping that directive strict is worth one cached request.
+    inlineStylesheets: 'never',
   },
 });
