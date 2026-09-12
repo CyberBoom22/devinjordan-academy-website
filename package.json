@@ -9,7 +9,8 @@
     "build": "astro build && node scripts/build-search-index.mjs",
     "preview": "wrangler pages dev ./dist",
     "check": "astro check",
-    "deploy": "astro build && wrangler pages deploy ./dist"
+    "deploy": "astro build && wrangler pages deploy ./dist",
+    "test:db": "bash scripts/test-db.sh"
   },
   "dependencies": {
     "@astrojs/cloudflare": "^12.6.13",

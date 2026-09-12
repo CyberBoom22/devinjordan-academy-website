@@ -122,6 +122,66 @@ merge to `main`, so it republishes the same way.
 The academy crests on the home and About pages are inline SVG authored for this
 site, not third-party assets.
 
+## Access model (staff accounts)
+
+Four roles ship with the system — **owner**, **instructor**, **staff**, **tech**
+— but a role is only a starting point. The owner can grant or revoke any
+individual permission for any individual person from the dashboard, so access
+does not have to fit one of four shapes.
+
+Effective access is worked out like this:
+
+```
+  role defaults  +  individual grants  −  individual revokes
+```
+
+A revoke always beats a grant. The owner role is a superuser and bypasses the
+whole calculation, so an owner can never be locked out of their own system.
+
+**Permissions are enforced in Postgres, not in the browser.** Every rule lives
+in Row Level Security policies and triggers, because anything checked only in
+client-side JavaScript can be bypassed by editing the page. The dashboard hides
+controls a person cannot use, but that is a courtesy — the database is what
+actually refuses.
+
+Four things the database will not let happen, whatever the UI does:
+
+- nobody can change their own role;
+- nobody can grant a permission they do not themselves hold, even with
+  `permissions.manage`;
+- the last active owner cannot be demoted, deactivated or deleted;
+- a new sign-up lands inactive with the weakest role, so registering an account
+  grants nothing until someone switches it on.
+
+The permission catalogue is defined once in `src/lib/permissions.ts` and the SQL
+seed is generated from it, so the list the code type-checks against and the list
+in the database cannot drift apart:
+
+```bash
+node --experimental-strip-types scripts/generate-permission-seed.mjs
+```
+
+### Database work
+
+```bash
+npm run test:db     # throwaway Postgres, applies every migration, runs the suite
+```
+
+`supabase/tests/01_rbac.test.sql` is the specification for the access model. If
+a migration change makes one of those assertions fail, the change is wrong until
+proven otherwise — each one corresponds to a real security hole.
+
+**First run on a new database:** the first owner cannot be created through the
+dashboard, because assigning roles requires a permission only an owner holds.
+Once that person has signed up, run this once from the Supabase SQL editor:
+
+```sql
+select public.bootstrap_owner('their@email.address');
+```
+
+It refuses to do anything once an active owner exists, and it is not callable
+from the browser.
+
 ## Security
 
 See [SECURITY.md](SECURITY.md) for the hardening applied and how to report a
