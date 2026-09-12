@@ -3,7 +3,10 @@ import { defineConfig } from 'astro/config';
 import cloudflare from '@astrojs/cloudflare';
 import sitemap from '@astrojs/sitemap';
 
-const SITE = process.env.PUBLIC_SITE_URL ?? 'https://devinjordansecuritytrainingacademy.com';
+// The canonical origin. Used for the sitemap, canonical URLs and absolute
+// social-card URLs. No `base` is set: the site is served from the apex domain,
+// not from a /repo-name subpath.
+const SITE = 'https://devinjordansecuritytrainingacademy.com';
 
 export default defineConfig({
   site: SITE,
