@@ -1,7 +1,26 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+.astro/
+.wrangler/
+.vercel/
+.netlify/
+
+# Environment — never commit real keys
+.env
+.env.*
+!.env.example
+
+# Editor / OS
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
 *.log
-node_modules/
-.env*
+npm-debug.log*
+
+# Supabase local stack
+supabase/.temp/
+supabase/.branches/

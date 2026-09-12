@@ -1,0 +1,79 @@
+/* ==========================================================================
+   Design tokens — the single source of truth for the academy's visual
+   identity. Every colour, font and spacing value used anywhere in the site
+   resolves back to one of these. Change a brand colour here and it changes
+   everywhere, including the admin area.
+
+   Values are carried over unchanged from the original hand-built site so the
+   rebuild is visually identical.
+   ========================================================================== */
+
+:root {
+  /* --- Brand ------------------------------------------------------------ */
+  --primary: #9b1b1b; /* Signature Maroon / Red */
+  --primary-bright: #b51f1f; /* Hover state for primary surfaces */
+  --primary-edge: #ff4444; /* Hairline highlight on primary buttons */
+  --accent: #c5a059; /* Executive Gold / Bronze */
+  --accent-light: #e2c482;
+  --accent-dark: #8f6f35;
+
+  /* --- Surfaces --------------------------------------------------------- */
+  --bg-dark: #121418; /* Tactical Charcoal base */
+  --bg-card: #1c1e24; /* Dark Slate for depth */
+  --bg-card-alt: #191b20; /* Zebra striping in dense tables */
+  --bg-card-hover: #23262d;
+  --bg-deep: #0f1114; /* Insets, dossier photo panel */
+  --nav-bg: #0a0b0d; /* Header, contact band, CTA band */
+  --footer-bg: #050608;
+
+  /* --- Text ------------------------------------------------------------- */
+  --text-main: #e4e4e4;
+  --text-muted: #8e9196;
+  --text-faint: #6b6e74;
+  --text-bright: #ffffff;
+
+  /* --- Lines ------------------------------------------------------------ */
+  --hairline: #2a2d33;
+  --border-card: #333333;
+  --border-input: #444444;
+
+  /* --- Status palette (news badges, form feedback) ----------------------- */
+  --status-ok-text: #a8d5a2;
+  --status-ok-border: #3e6b3a;
+  --status-ok-bg: rgba(62, 107, 58, 0.15);
+  --status-warn-text: #e2c482;
+  --status-warn-border: #8f6f35;
+  --status-warn-bg: rgba(197, 160, 89, 0.12);
+  --status-info-text: #a9c4e8;
+  --status-info-border: #3c5a80;
+  --status-info-bg: rgba(60, 90, 128, 0.15);
+  --status-err-text: #c98f8f;
+  --status-err-border: #6b3a3a;
+  --status-err-bg: rgba(107, 58, 58, 0.15);
+
+  /* --- Type ------------------------------------------------------------- */
+  --font-heading: 'Montserrat', 'Helvetica Neue', Arial, sans-serif;
+  --font-body: 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Courier New', monospace;
+
+  /* --- Layout ----------------------------------------------------------- */
+  --wrap: 1200px;
+  --wrap-narrow: 1100px;
+  --nav-height: 90px;
+  --radius: 4px;
+  --radius-sm: 2px;
+
+  /* --- Elevation -------------------------------------------------------- */
+  --shadow-nav: 0 5px 20px rgba(0, 0, 0, 0.5);
+  --shadow-card: 0 15px 30px rgba(0, 0, 0, 0.7);
+  --shadow-image: 0 20px 40px rgba(0, 0, 0, 0.6);
+  --shadow-btn: 0 10px 20px rgba(155, 27, 27, 0.3);
+  --shadow-btn-hover: 0 15px 30px rgba(155, 27, 27, 0.5);
+
+  /* --- Motion ----------------------------------------------------------- */
+  --ease-out: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-overshoot: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  --ease-snap: cubic-bezier(0.2, 0.9, 0.3, 1.1);
+
+  color-scheme: dark;
+}

@@ -1,0 +1,204 @@
+/* ==========================================================================
+   Global base — reset, document defaults, typography and the one shared
+   control (the button) that appears on nearly every page.
+
+   Everything else lives in a component's own scoped <style> block, so a
+   component can be deleted without leaving orphaned CSS behind.
+   ========================================================================== */
+
+@import './tokens.css';
+@import './animations.css';
+
+*,
+*::before,
+*::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  max-width: 100%;
+  overflow-x: hidden;
+  /* Fixed header: anchor targets must not hide underneath it. */
+  scroll-padding-top: calc(var(--nav-height) + 10px);
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: var(--bg-dark);
+  color: var(--text-main);
+  line-height: 1.6;
+  /* Nothing may push the layout wider than the screen. */
+  max-width: 100%;
+  overflow-x: hidden;
+  overflow-wrap: break-word;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Media scales down with its container instead of forcing a scrollbar. */
+img,
+svg,
+video,
+iframe {
+  max-width: 100%;
+}
+
+img:not([height]) {
+  height: auto;
+}
+
+h1,
+h2,
+h3,
+h4,
+.heading-font {
+  font-family: var(--font-heading);
+  text-transform: uppercase;
+}
+
+a {
+  color: inherit;
+}
+
+/* Visible keyboard focus. Never remove this without a replacement. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* Skip link — first tab stop, hidden until focused. */
+.skip-link {
+  position: absolute;
+  top: -100px;
+  left: 16px;
+  z-index: 2000;
+  padding: 12px 20px;
+  background: var(--primary);
+  color: var(--text-bright);
+  font-family: var(--font-heading);
+  font-weight: 700;
+  letter-spacing: 2px;
+  font-size: 0.8rem;
+  text-decoration: none;
+  border-radius: var(--radius);
+  transition: top 0.2s;
+}
+
+.skip-link:focus {
+  top: 16px;
+}
+
+/* --- Buttons -------------------------------------------------------------
+   .btn is the filled maroon call to action. .btn-ghost is the gold outline
+   secondary. .btn-sm is the compact variant used inside pricing cards.
+   ------------------------------------------------------------------------- */
+
+.btn {
+  display: inline-block;
+  padding: 15px 40px;
+  background: var(--primary);
+  color: var(--text-bright);
+  text-decoration: none;
+  font-family: var(--font-heading);
+  font-weight: 900;
+  font-size: 1.2rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  text-align: center;
+  border-radius: var(--radius);
+  border: 1px solid var(--primary-edge);
+  transition:
+    transform 0.3s var(--ease-out),
+    box-shadow 0.3s var(--ease-out),
+    background 0.3s var(--ease-out);
+  cursor: pointer;
+  box-shadow: var(--shadow-btn);
+}
+
+.btn:hover {
+  transform: scale(1.05) translateY(-3px);
+  box-shadow: var(--shadow-btn-hover);
+  background: var(--primary-bright);
+}
+
+.btn-ghost {
+  background: transparent;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  box-shadow: none;
+  font-size: 1rem;
+  padding: 13px 32px;
+}
+
+.btn-ghost:hover {
+  background: var(--accent);
+  color: var(--nav-bg);
+  box-shadow: 0 15px 30px rgba(197, 160, 89, 0.25);
+}
+
+.btn-sm {
+  padding: 10px 20px;
+  font-size: 0.9rem;
+}
+
+/* --- Shared small pieces -------------------------------------------------- */
+
+.eyebrow {
+  display: inline-block;
+  font-family: var(--font-heading);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 18px;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Find-in-page highlight. Lives here because the find bar injects these
+   marks into any component's markup, so they cannot be component-scoped. */
+mark.find-hit {
+  background: rgba(197, 160, 89, 0.4);
+  color: inherit;
+  padding: 0 1px;
+  border-radius: var(--radius-sm);
+}
+
+mark.find-hit.current {
+  background: var(--primary);
+  color: var(--text-bright);
+  box-shadow: 0 0 0 2px rgba(155, 27, 27, 0.45);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .btn:hover {
+    transform: none;
+  }
+}
