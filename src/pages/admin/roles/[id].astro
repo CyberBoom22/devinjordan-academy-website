@@ -1,0 +1,175 @@
+---
+/**
+ * Edit one role's permissions.
+ *
+ * This is the most powerful screen in the system — it can redefine what every
+ * account holding the role may do — so it is gated on `role.manage`, which only
+ * the Owner holds by default, and on outranking the role being edited.
+ */
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import { can, outranks } from '../../../lib/auth/session';
+import { PERMISSIONS, permissionsByGroup } from '../../../lib/auth/permissions';
+
+const { supabase, session } = Astro.locals;
+const { id } = Astro.params;
+
+if (!can(session, 'role.manage')) {
+  return Astro.redirect('/admin?error=forbidden', 303);
+}
+
+type RoleRow = {
+  id: string;
+  key: string;
+  name: string;
+  description: string | null;
+  level: number;
+  is_system: boolean;
+};
+
+let notice: { kind: 'success' | 'error'; message: string } | null = null;
+let role: RoleRow | null = null;
+let held = new Set<string>();
+let holderCount = 0;
+let loadError: string | null = null;
+
+if (supabase && id) {
+  const { data } = await supabase
+    .from('roles')
+    .select('id, key, name, description, level, is_system')
+    .eq('id', id)
+    .maybeSingle();
+  role = (data ?? null) as RoleRow | null;
+}
+
+const mayEdit = role !== null && outranks(session, role.level);
+
+if (Astro.request.method === 'POST' && supabase && id && mayEdit) {
+  const form = await Astro.request.formData();
+  const wanted = new Set(form.getAll('permission').map(String));
+
+  const { data: current } = await supabase
+    .from('role_permissions')
+    .select('permission_key')
+    .eq('role_id', id);
+
+  const currentKeys = new Set(
+    (current ?? []).map((row: { permission_key: string }) => row.permission_key),
+  );
+  const toAdd = [...wanted].filter((key) => !currentKeys.has(key));
+  const toRemove = [...currentKeys].filter((key) => !wanted.has(key));
+
+  const errors: string[] = [];
+
+  if (toRemove.length) {
+    const { error } = await supabase
+      .from('role_permissions')
+      .delete()
+      .eq('role_id', id)
+      .in('permission_key', toRemove);
+    if (error) errors.push(error.message);
+  }
+
+  if (toAdd.length) {
+    const { error } = await supabase
+      .from('role_permissions')
+      .insert(toAdd.map((key) => ({ role_id: id, permission_key: key })));
+    if (error) errors.push(error.message);
+  }
+
+  notice = errors.length
+    ? { kind: 'error', message: errors.join(' ') }
+    : {
+        kind: 'success',
+        message: `Saved. ${toAdd.length} added, ${toRemove.length} removed — everyone holding this role is affected immediately.`,
+      };
+}
+
+if (supabase && id) {
+  const [permsResult, holdersResult] = await Promise.all([
+    supabase.from('role_permissions').select('permission_key').eq('role_id', id),
+    supabase.from('user_roles').select('user_id', { count: 'exact', head: true }).eq('role_id', id),
+  ]);
+  loadError = permsResult.error?.message ?? null;
+  held = new Set(
+    (permsResult.data ?? []).map((row: { permission_key: string }) => row.permission_key),
+  );
+  holderCount = holdersResult.count ?? 0;
+}
+
+const groups = permissionsByGroup();
+---
+
+<AdminLayout title={role?.name ?? 'Role'}>
+  <div class="admin-head">
+    <h1>{role?.name ?? 'Role not found'}</h1>
+    {role && <p>{role.description}</p>}
+  </div>
+
+  <p style="margin-bottom:22px"><a href="/admin/roles">← All roles</a></p>
+
+  {loadError && <div class="notice error">{loadError}</div>}
+  {notice && <div class:list={['notice', notice.kind]}>{notice.message}</div>}
+
+  {
+    role && !mayEdit && (
+      <div class="notice warn">
+        This role is at or above your own level, so you cannot change it.
+      </div>
+    )
+  }
+
+  {
+    role && mayEdit && (
+      <>
+        {holderCount > 0 && (
+          <div class="notice info">
+            {holderCount} {holderCount === 1 ? 'person holds' : 'people hold'} this role. Anything
+            you change here changes what {holderCount === 1 ? 'they' : 'they all'} can do, straight
+            away.
+          </div>
+        )}
+
+        <form method="POST">
+          <div class="admin-card">
+            <h2>Permissions</h2>
+            <p>
+              Tick what this role may do. If someone needs one extra permission just for themselves,
+              grant it on their account instead of widening the role for everyone.
+            </p>
+
+            {[...groups.entries()].map(([group, keys]) => (
+              <div class="perm-group">
+                <h3>{group}</h3>
+                {keys.map((key) => (
+                  <div class="perm-row">
+                    <input
+                      type="checkbox"
+                      id={`perm-${key}`}
+                      name="permission"
+                      value={key}
+                      checked={held.has(key)}
+                    />
+                    <label for={`perm-${key}`}>
+                      <span class="perm-label">{PERMISSIONS[key].label}</span>
+                      <span class="perm-desc">{PERMISSIONS[key].description}</span>
+                      <span class="perm-key">{key}</span>
+                    </label>
+                  </div>
+                ))}
+              </div>
+            ))}
+
+            <div class="form-actions">
+              <button type="submit" class="btn-admin">
+                Save permissions
+              </button>
+              <a href="/admin/roles" class="btn-admin secondary">
+                Cancel
+              </a>
+            </div>
+          </div>
+        </form>
+      </>
+    )
+  }
+</AdminLayout>

@@ -1,0 +1,135 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { can } from '../../lib/auth/session';
+import { PERMISSIONS, type Permission } from '../../lib/auth/permissions';
+
+const { supabase, session } = Astro.locals;
+const user = session.user!;
+
+/** Count rows without fetching them. Returns null when the table is unreachable. */
+async function countOf(table: string, filter?: { column: string; value: string }) {
+  if (!supabase) return null;
+  let query = supabase.from(table).select('id', { count: 'exact', head: true });
+  if (filter) query = query.eq(filter.column, filter.value);
+  const { count, error } = await query;
+  return error ? null : (count ?? 0);
+}
+
+const [courses, drafts, newsItems, enquiries] = await Promise.all([
+  can(session, 'course.read') ? countOf('courses', { column: 'status', value: 'published' }) : null,
+  can(session, 'course.read') ? countOf('courses', { column: 'status', value: 'draft' }) : null,
+  can(session, 'news.read')
+    ? countOf('news_items', { column: 'status', value: 'published' })
+    : null,
+  can(session, 'enquiry.read') ? countOf('enquiries', { column: 'status', value: 'new' }) : null,
+]);
+
+const tiles = [
+  {
+    label: 'Published courses',
+    value: courses,
+    href: '/admin/courses',
+    show: can(session, 'course.read'),
+  },
+  {
+    label: 'Courses in draft',
+    value: drafts,
+    href: '/admin/courses',
+    show: can(session, 'course.read'),
+  },
+  {
+    label: 'Published news items',
+    value: newsItems,
+    href: '/admin/news',
+    show: can(session, 'news.read'),
+  },
+  {
+    label: 'New enquiries',
+    value: enquiries,
+    href: '/admin/enquiries',
+    show: can(session, 'enquiry.read'),
+  },
+].filter((tile) => tile.show);
+
+// Shown grouped so the academy can see at a glance what this account may do —
+// the same list an administrator ticks when setting the account up.
+const held = [...session.permissions].filter((key): key is Permission => key in PERMISSIONS);
+const grouped = new Map<string, Permission[]>();
+for (const key of held) {
+  const group = PERMISSIONS[key].group;
+  grouped.set(group, [...(grouped.get(group) ?? []), key]);
+}
+---
+
+<AdminLayout title="Dashboard">
+  <div class="admin-head">
+    <h1>Welcome back{user.fullName ? `, ${user.fullName.split(' ')[0]}` : ''}</h1>
+    <p>
+      This is where the website is managed. Everything the public site shows — course prices,
+      instructor bios, legislation summaries, the ORI directory, the phone numbers in the footer —
+      is edited here and goes live immediately.
+    </p>
+  </div>
+
+  {
+    !supabase && (
+      <div class="notice warn">
+        <strong>No database connected.</strong> The public site is running on the content built into
+        the repository, and nothing edited here can be saved. Set PUBLIC_SUPABASE_URL and
+        PUBLIC_SUPABASE_ANON_KEY to connect it.
+      </div>
+    )
+  }
+
+  {
+    tiles.length > 0 && (
+      <div class="admin-card">
+        <h2>At a glance</h2>
+        <table class="admin-table">
+          <tbody>
+            {tiles.map((tile) => (
+              <tr>
+                <td style="width:70px">
+                  <strong style="font-family:var(--font-heading);font-size:1.5rem;color:var(--accent)">
+                    {tile.value ?? '—'}
+                  </strong>
+                </td>
+                <td>
+                  <a href={tile.href}>{tile.label}</a>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+
+  <div class="admin-card">
+    <h2>What this account can do</h2>
+    <p>
+      Your access comes from {user.roles.length === 1 ? 'the role' : 'the roles'}
+      {' '}
+      {user.roles.map((role) => role.name).join(', ') || '— none assigned —'}, plus any permission
+      granted or withheld for you personally. If something you need is missing, an administrator can
+      add it without changing anyone else's access.
+    </p>
+
+    {
+      [...grouped.entries()].map(([group, keys]) => (
+        <div class="perm-group">
+          <h3>{group}</h3>
+          {keys.map((key) => (
+            <div class="perm-row">
+              <i class="fa-solid fa-check" aria-hidden="true" style="color:var(--status-ok-text)" />
+              <span>
+                <span class="perm-label">{PERMISSIONS[key].label}</span>
+                <span class="perm-desc">{PERMISSIONS[key].description}</span>
+              </span>
+            </div>
+          ))}
+        </div>
+      ))
+    }
+  </div>
+</AdminLayout>

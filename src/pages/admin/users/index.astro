@@ -1,0 +1,161 @@
+---
+/**
+ * Staff accounts.
+ *
+ * Shows everyone, but only links through to the accounts this session may
+ * actually administer — anyone at or above your own role level is listed
+ * without an edit link, because the database would refuse the write anyway and
+ * a link that always fails is worse than no link.
+ */
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import { can, outranks } from '../../../lib/auth/session';
+
+const { supabase, session } = Astro.locals;
+
+type ProfileRow = {
+  id: string;
+  email: string;
+  full_name: string | null;
+  status: 'invited' | 'active' | 'suspended';
+  last_seen_at: string | null;
+  user_roles: { role: { key: string; name: string; level: number } | null }[];
+};
+
+let rows: ProfileRow[] = [];
+let loadError: string | null = null;
+
+if (supabase) {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, email, full_name, status, last_seen_at, user_roles(role:roles(key, name, level))')
+    .order('full_name', { nullsFirst: false });
+
+  if (error) loadError = error.message;
+  else
+    rows = // Cast through unknown: src/lib/supabase/database.types.ts is still the
+      // placeholder, so Supabase cannot infer the shape of an embedded join. This
+      // narrows correctly on its own once `npm run db:types` has been run.
+      (data ?? []) as unknown as ProfileRow[];
+}
+
+function levelOf(row: ProfileRow): number {
+  const levels = row.user_roles
+    .map((entry) => entry.role?.level)
+    .filter((n): n is number => typeof n === 'number');
+  return levels.length ? Math.min(...levels) : 999;
+}
+
+function formatSeen(value: string | null): string {
+  if (!value) return 'Never signed in';
+  return new Date(value).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+---
+
+<AdminLayout title="Staff accounts">
+  <div class="admin-head">
+    <h1>Staff accounts</h1>
+    <p>
+      Everyone who can sign in to the admin area. You can only edit accounts below your own role
+      level — that rule is what stops an administrator from changing a peer's access or promoting
+      themselves, and it is enforced by the database, not just hidden here.
+    </p>
+  </div>
+
+  {loadError && <div class="notice error">Could not load accounts: {loadError}</div>}
+  {
+    !supabase && (
+      <div class="notice warn">No database connected, so there are no accounts to show.</div>
+    )
+  }
+
+  {
+    can(session, 'user.invite') && (
+      <p style="margin-bottom:22px">
+        <a href="/admin/users/invite" class="btn-admin">
+          Invite someone
+        </a>
+      </p>
+    )
+  }
+
+  <div class="admin-card">
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Roles</th>
+          <th>Status</th>
+          <th>Last seen</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {
+          rows.map((row) => {
+            const manageable = outranks(session, levelOf(row)) && row.id !== session.user?.id;
+            return (
+              <tr>
+                <td>
+                  <strong>{row.full_name ?? '—'}</strong>
+                  <br />
+                  <span style="color:var(--text-muted);font-size:0.84rem">{row.email}</span>
+                  {row.id === session.user?.id && (
+                    <span class="badge-role" style="margin-left:8px">
+                      You
+                    </span>
+                  )}
+                </td>
+                <td>
+                  <div class="admin-roles">
+                    {row.user_roles
+                      .map((entry) => entry.role)
+                      .filter(Boolean)
+                      .map((role) => (
+                        <span class="badge-role">{role!.name}</span>
+                      ))}
+                    {row.user_roles.length === 0 && (
+                      <span style="color:var(--text-faint);font-size:0.84rem">
+                        No role — cannot sign in
+                      </span>
+                    )}
+                  </div>
+                </td>
+                <td>
+                  <span class:list={['badge-status', row.status]}>{row.status}</span>
+                </td>
+                <td style="color:var(--text-muted);font-size:0.86rem">
+                  {formatSeen(row.last_seen_at)}
+                </td>
+                <td style="text-align:right">
+                  {manageable ? (
+                    <a href={`/admin/users/${row.id}`}>Manage</a>
+                  ) : (
+                    <span
+                      style="color:var(--text-faint);font-size:0.8rem"
+                      title="This account is at or above your own role level"
+                    >
+                      —
+                    </span>
+                  )}
+                </td>
+              </tr>
+            );
+          })
+        }
+        {
+          rows.length === 0 && !loadError && (
+            <tr>
+              <td colspan="5" style="color:var(--text-muted)">
+                No accounts yet.
+              </td>
+            </tr>
+          )
+        }
+      </tbody>
+    </table>
+  </div>
+</AdminLayout>

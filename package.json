@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Devin Jordan Security Training Academy — website and content management system",
+  "description": "Devin Jordan Security Training Academy \u2014 website and content management system",
   "engines": {
     "node": ">=20"
   },
@@ -18,7 +18,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "db:types": "supabase gen types typescript --linked > src/lib/supabase/database.types.ts",
-    "verify": "npm run format:check && npm run lint && npm run check && npm run build"
+    "verify": "npm run format:check && npm run lint && npm run check && npm run build",
+    "db:permissions": "node --experimental-strip-types scripts/generate-permission-sql.mjs"
   },
   "dependencies": {
     "@astrojs/cloudflare": "^12.2.1",
