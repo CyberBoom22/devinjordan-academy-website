@@ -1,0 +1,21 @@
+#:schema node_modules/wrangler/config-schema.json
+name = "devinjordan-academy"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+main = "./dist/_worker.js/index.js"
+assets = { directory = "./dist", binding = "ASSETS" }
+
+# Secrets are NOT set here. Set them once per environment with:
+#   wrangler secret put SUPABASE_SERVICE_ROLE_KEY
+# Public (non-secret) values live in .env locally and in the Cloudflare
+# dashboard for deployed environments.
+[vars]
+PUBLIC_SITE_URL = "https://devinjordansecuritytrainingacademy.com"
+
+# Astro's session API is backed by Workers KV. This project does not use it —
+# auth state lives in Supabase cookies — so no namespace is required. If a
+# future feature calls Astro.session, create one and bind it here:
+#   wrangler kv namespace create SESSION
+# [[kv_namespaces]]
+# binding = "SESSION"
+# id = "<id printed by the command above>"

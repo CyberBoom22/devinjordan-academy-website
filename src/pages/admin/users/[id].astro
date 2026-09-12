@@ -1,0 +1,384 @@
+---
+/**
+ * Manage one staff account: which roles it holds, and any permission granted or
+ * withheld for this person specifically.
+ *
+ * The per-person overrides are the point of the whole design. Without them,
+ * "let Maria publish news, just this once" means promoting her to Editor and
+ * handing her everything else that comes with it. With them, it is one
+ * checkbox, it is recorded with a reason, and it can be lifted later without
+ * touching her role.
+ *
+ * Every write here is also policed by row level security. The checks in this
+ * file decide what to RENDER; the database decides what is allowed.
+ */
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import { can, outranks } from '../../../lib/auth/session';
+import { PERMISSIONS, permissionsByGroup, type Permission } from '../../../lib/auth/permissions';
+
+const { supabase, session } = Astro.locals;
+const { id } = Astro.params;
+
+if (!can(session, 'user.manage')) {
+  return Astro.redirect('/admin?error=forbidden', 303);
+}
+
+type RoleRow = { id: string; key: string; name: string; description: string | null; level: number };
+
+let notice: { kind: 'success' | 'error'; message: string } | null = null;
+
+/* ---------------------------------------------------------------- handlers */
+if (Astro.request.method === 'POST' && supabase && id) {
+  const form = await Astro.request.formData();
+  const action = String(form.get('action') ?? '');
+
+  if (action === 'roles') {
+    const wanted = new Set(form.getAll('role').map(String));
+    const { data: assignable } = await supabase.from('roles').select('id, level');
+    const { data: current } = await supabase.from('user_roles').select('role_id').eq('user_id', id);
+
+    const currentIds = new Set((current ?? []).map((row: { role_id: string }) => row.role_id));
+    const allowedIds = new Set(
+      (assignable ?? [])
+        .filter((role: { level: number }) => outranks(session, role.level))
+        .map((role: { id: string }) => role.id),
+    );
+
+    const toAdd = [...wanted].filter((roleId) => allowedIds.has(roleId) && !currentIds.has(roleId));
+    const toRemove = [...currentIds].filter(
+      (roleId) => allowedIds.has(roleId) && !wanted.has(roleId),
+    );
+
+    const errors: string[] = [];
+
+    if (toAdd.length) {
+      const { error } = await supabase
+        .from('user_roles')
+        .insert(
+          toAdd.map((roleId) => ({ user_id: id, role_id: roleId, granted_by: session.user?.id })),
+        );
+      if (error) errors.push(error.message);
+    }
+
+    for (const roleId of toRemove) {
+      // Removed one at a time so the "last owner" trigger can veto a single
+      // removal with a message, instead of failing the whole batch opaquely.
+      const { error } = await supabase
+        .from('user_roles')
+        .delete()
+        .eq('user_id', id)
+        .eq('role_id', roleId);
+      if (error) errors.push(error.message);
+    }
+
+    notice = errors.length
+      ? { kind: 'error', message: errors.join(' ') }
+      : { kind: 'success', message: 'Roles updated.' };
+  }
+
+  if (action === 'status') {
+    const status = String(form.get('status') ?? '');
+    if (['invited', 'active', 'suspended'].includes(status)) {
+      const { error } = await supabase.from('profiles').update({ status }).eq('id', id);
+      notice = error
+        ? { kind: 'error', message: error.message }
+        : { kind: 'success', message: `Account is now ${status}.` };
+    }
+  }
+
+  if (action === 'overrides') {
+    const reason = String(form.get('reason') ?? '').trim();
+    const errors: string[] = [];
+    const upserts: {
+      user_id: string;
+      permission_key: string;
+      effect: string;
+      reason: string;
+      granted_by?: string;
+    }[] = [];
+    const removals: string[] = [];
+
+    for (const key of Object.keys(PERMISSIONS)) {
+      const value = String(form.get(`perm:${key}`) ?? 'inherit');
+      if (value === 'grant' || value === 'deny') {
+        upserts.push({
+          user_id: id,
+          permission_key: key,
+          effect: value,
+          reason,
+          granted_by: session.user?.id,
+        });
+      } else {
+        removals.push(key);
+      }
+    }
+
+    if (upserts.length && !reason) {
+      notice = {
+        kind: 'error',
+        message:
+          'Give a reason for the exception. An unexplained override is one nobody dares remove later.',
+      };
+    } else {
+      if (removals.length) {
+        const { error } = await supabase
+          .from('user_permissions')
+          .delete()
+          .eq('user_id', id)
+          .in('permission_key', removals);
+        if (error) errors.push(error.message);
+      }
+      if (upserts.length) {
+        const { error } = await supabase
+          .from('user_permissions')
+          .upsert(upserts, { onConflict: 'user_id,permission_key' });
+        if (error) errors.push(error.message);
+      }
+      notice = errors.length
+        ? { kind: 'error', message: errors.join(' ') }
+        : { kind: 'success', message: 'Personal permissions updated.' };
+    }
+  }
+}
+
+/* ------------------------------------------------------------------- reads */
+let profile: {
+  id: string;
+  email: string;
+  full_name: string | null;
+  status: 'invited' | 'active' | 'suspended';
+} | null = null;
+let allRoles: RoleRow[] = [];
+let heldRoleIds = new Set<string>();
+let overrides = new Map<string, { effect: 'grant' | 'deny'; reason: string }>();
+let rolePermissions = new Set<string>();
+let loadError: string | null = null;
+
+if (supabase && id) {
+  const [profileResult, rolesResult, heldResult, overrideResult] = await Promise.all([
+    supabase.from('profiles').select('id, email, full_name, status').eq('id', id).maybeSingle(),
+    supabase.from('roles').select('id, key, name, description, level').order('level'),
+    supabase
+      .from('user_roles')
+      .select('role_id, role:roles(level, role_permissions(permission_key))')
+      .eq('user_id', id),
+    supabase.from('user_permissions').select('permission_key, effect, reason').eq('user_id', id),
+  ]);
+
+  loadError = profileResult.error?.message ?? rolesResult.error?.message ?? null;
+  profile = profileResult.data ?? null;
+  allRoles = (rolesResult.data ?? []) as RoleRow[];
+
+  // Same placeholder-types caveat as the other admin screens.
+  type HeldRow = {
+    role_id: string;
+    role: { level: number; role_permissions: { permission_key: string }[] } | null;
+  };
+
+  for (const row of (heldResult.data ?? []) as unknown as HeldRow[]) {
+    heldRoleIds.add(row.role_id);
+    for (const rp of row.role?.role_permissions ?? []) rolePermissions.add(rp.permission_key);
+  }
+
+  for (const row of overrideResult.data ?? []) {
+    overrides.set(row.permission_key, { effect: row.effect, reason: row.reason });
+  }
+}
+
+const targetLevel = (() => {
+  const levels = allRoles.filter((role) => heldRoleIds.has(role.id)).map((role) => role.level);
+  return levels.length ? Math.min(...levels) : 999;
+})();
+
+const mayManage =
+  profile !== null && profile.id !== session.user?.id && outranks(session, targetLevel);
+const groups = permissionsByGroup();
+
+function effectiveState(key: Permission): 'grant' | 'deny' | 'inherit' {
+  return overrides.get(key)?.effect ?? 'inherit';
+}
+---
+
+<AdminLayout title={profile?.full_name ?? profile?.email ?? 'Staff account'}>
+  <div class="admin-head">
+    <h1>{profile?.full_name ?? profile?.email ?? 'Account not found'}</h1>
+    {profile && <p>{profile.email}</p>}
+  </div>
+
+  <p style="margin-bottom:22px"><a href="/admin/users">← All staff accounts</a></p>
+
+  {loadError && <div class="notice error">{loadError}</div>}
+  {notice && <div class:list={['notice', notice.kind]}>{notice.message}</div>}
+
+  {
+    profile && !mayManage && (
+      <div class="notice warn">
+        This account is at or above your own role level, so you cannot change it. Only someone who
+        outranks it can.
+      </div>
+    )
+  }
+
+  {
+    profile && mayManage && (
+      <>
+        <div class="admin-card">
+          <h2>Roles</h2>
+          <p>
+            A role is a bundle of permissions. Most people should have exactly one. Only roles below
+            your own level are listed — you cannot grant authority you do not outrank.
+          </p>
+
+          <form method="POST">
+            <input type="hidden" name="action" value="roles" />
+            {allRoles.map((role) => {
+              const assignable = outranks(session, role.level);
+              return (
+                <div class="perm-row">
+                  <input
+                    type="checkbox"
+                    id={`role-${role.id}`}
+                    name="role"
+                    value={role.id}
+                    checked={heldRoleIds.has(role.id)}
+                    disabled={!assignable}
+                  />
+                  <label for={`role-${role.id}`}>
+                    <span class="perm-label">
+                      {role.name}
+                      {!assignable && (
+                        <span style="margin-left:10px;font-size:0.62rem;letter-spacing:1px;text-transform:uppercase;color:var(--text-faint)">
+                          above your level
+                        </span>
+                      )}
+                    </span>
+                    <span class="perm-desc">{role.description}</span>
+                  </label>
+                </div>
+              );
+            })}
+
+            <div class="form-actions">
+              <button type="submit" class="btn-admin">
+                Save roles
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <div class="admin-card">
+          <h2>Account status</h2>
+          <p>
+            Suspending an account leaves everything it holds intact but refuses every permission
+            immediately, on the next request. Use it when someone leaves, and delete only when you
+            are certain.
+          </p>
+
+          <form method="POST">
+            <input type="hidden" name="action" value="status" />
+            <div class="field" style="max-width:280px">
+              <label for="status">Status</label>
+              <select id="status" name="status">
+                <option value="invited" selected={profile.status === 'invited'}>
+                  Invited — has not accepted yet
+                </option>
+                <option value="active" selected={profile.status === 'active'}>
+                  Active
+                </option>
+                <option value="suspended" selected={profile.status === 'suspended'}>
+                  Suspended
+                </option>
+              </select>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn-admin secondary">
+                Update status
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <div class="admin-card">
+          <h2>Personal permissions</h2>
+          <p>
+            Exceptions for this person alone, layered over their roles. <strong>Inherit</strong> is
+            normal — the role decides. <strong>Grant</strong> adds one permission without promoting
+            them. <strong>Deny</strong> removes one even though a role provides it, and a deny
+            always wins.
+          </p>
+
+          <form method="POST">
+            <input type="hidden" name="action" value="overrides" />
+
+            {[...groups.entries()].map(([group, keys]) => (
+              <div class="perm-group">
+                <h3>{group}</h3>
+                {keys.map((key) => {
+                  const state = effectiveState(key);
+                  const fromRole = rolePermissions.has(key);
+                  return (
+                    <div
+                      class:list={[
+                        'perm-row',
+                        {
+                          'is-override-grant': state === 'grant',
+                          'is-override-deny': state === 'deny',
+                        },
+                      ]}
+                      style="grid-template-columns: 210px 1fr"
+                    >
+                      <select
+                        name={`perm:${key}`}
+                        aria-label={`Permission: ${PERMISSIONS[key].label}`}
+                      >
+                        <option value="inherit" selected={state === 'inherit'}>
+                          Inherit ({fromRole ? 'allowed by role' : 'not allowed'})
+                        </option>
+                        <option value="grant" selected={state === 'grant'}>
+                          Grant
+                        </option>
+                        <option value="deny" selected={state === 'deny'}>
+                          Deny
+                        </option>
+                      </select>
+                      <span>
+                        <span class="perm-label">{PERMISSIONS[key].label}</span>
+                        <span class="perm-desc">{PERMISSIONS[key].description}</span>
+                        <span class="perm-key">{key}</span>
+                        {overrides.get(key)?.reason && (
+                          <span class="perm-desc">
+                            <em>Reason on file: {overrides.get(key)!.reason}</em>
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+
+            <div class="field">
+              <label for="reason">Why this exception?</label>
+              <input
+                type="text"
+                id="reason"
+                name="reason"
+                placeholder="e.g. Covering news updates while Dana is on leave, until 1 March"
+              />
+              <p class="hint">
+                Required whenever anything is set to Grant or Deny. Recorded against the account so
+                whoever reviews this in a year knows whether it still applies.
+              </p>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" class="btn-admin">
+                Save personal permissions
+              </button>
+            </div>
+          </form>
+        </div>
+      </>
+    )
+  }
+</AdminLayout>

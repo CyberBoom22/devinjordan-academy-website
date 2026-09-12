@@ -1,8 +1,7 @@
 # Security
 
-This document covers how the Devin Jordan Security Training Academy website is
-hardened, what the hosting platform can and cannot enforce, and how to report a
-problem.
+How the Devin Jordan Security Training Academy website is hardened, what the
+hosting platform enforces, and how to report a problem.
 
 ## Reporting a vulnerability
 
@@ -11,7 +10,7 @@ Please report suspected security issues by phone:
 **(848) 398-0976**
 
 The same contact is published in machine-readable form at
-[`/.well-known/security.txt`](.well-known/security.txt), per RFC 9116.
+[`/.well-known/security.txt`](public/.well-known/security.txt), per RFC 9116.
 
 Please include what you found, how to reproduce it, and how we can reach you.
 Allow a few business days for a reply. Please do not publicly disclose an issue
@@ -22,85 +21,109 @@ before we have had a chance to fix it.
 > than a phone number. It creates a written record, works across time zones, and
 > is what most researchers and automated tools expect. If one is set up, add it
 > as the first `Contact:` line in `security.txt`.
+>
+> The current `security.txt` **expires 2027-09-11** and must be refreshed before
+> then, or tooling will treat it as stale.
+
+## Access control
+
+Authorisation is enforced by the database, not by the application.
+
+Every table carries row level security, and every policy calls one function,
+`app.has_permission()`. The same function backs the public site's reads, the
+admin area's writes, and anything a hand-crafted request might try. Template
+checks decide what to _render_ — hiding a button someone cannot use — and are
+deliberately not the security boundary.
+
+The model has three layers: a suspended account can do nothing; a per-person
+override grants or denies a single permission, with a deny beating every role;
+otherwise the union of the account's roles applies.
+
+Separately, roles carry a numeric authority level and an account may only
+administer accounts and roles strictly below its own. This is what prevents
+privilege escalation: without it, any holder of `user.manage` could grant
+itself `role.manage`. A database trigger additionally refuses to remove the
+last active Owner, so the academy cannot lock itself out.
+
+Full details in [README.md](README.md#how-access-control-works).
 
 ## Hardening applied
 
-**Self-hosted assets.** Every stylesheet, script, font, and icon the page needs
-is served from this repository. There are no requests to Google Fonts, cdnjs, or
-any other third-party origin, so no outside party can see who visits the site or
-change what the site serves. The one exception is noted under *Known gaps* below.
+**Real response headers.** The site runs on Cloudflare Workers, which can set
+response headers. `src/lib/security.ts` sets them on every response:
 
-**Content Security Policy.** Every page carries a strict CSP `<meta>` tag that
-limits the browser to loading resources from this origin only:
+| Header                       | Value                                                                                    |
+| ---------------------------- | ---------------------------------------------------------------------------------------- |
+| `Content-Security-Policy`    | `default-src 'self'`, no `'unsafe-inline'`, no `'unsafe-eval'`, `frame-ancestors 'none'` |
+| `X-Frame-Options`            | `DENY`                                                                                   |
+| `X-Content-Type-Options`     | `nosniff`                                                                                |
+| `Referrer-Policy`            | `strict-origin-when-cross-origin`                                                        |
+| `Permissions-Policy`         | camera, microphone, geolocation, payment and USB all switched off                        |
+| `Strict-Transport-Security`  | `max-age=31536000; includeSubDomains; preload` (HTTPS only)                              |
+| `Cross-Origin-Opener-Policy` | `same-origin`                                                                            |
 
-```
-default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self';
-font-src 'self'; connect-src 'self'; frame-src 'none'; object-src 'none';
-base-uri 'self'; form-action 'none'; upgrade-insecure-requests
-```
+Admin responses additionally carry `Cache-Control: private, no-store` and
+`X-Robots-Tag: noindex, nofollow`.
 
-It uses neither `'unsafe-inline'` nor `'unsafe-eval'`. `object-src 'none'` and
-`frame-src 'none'` block plugins and embedded frames, `base-uri 'self'` stops an
-injected `<base>` tag from redirecting relative URLs, `form-action 'none'` stops
-any injected form from submitting anywhere, and `upgrade-insecure-requests`
-rewrites stray `http://` subresource URLs to `https://`.
+**Self-hosted assets.** Every stylesheet, script, font and icon is served from
+this origin. There are no requests to Google Fonts, cdnjs or any other
+third-party origin, so no outside party can see who visits the site or change
+what the site serves.
 
-**No inline code.** There are no inline `<script>` blocks, no `on*` event
-handler attributes, no `javascript:` URLs, and no `eval` or `new Function`. All
-behaviour lives in `assets/js/`. There are also no inline `style="..."`
-attributes — every one was replaced by a named class — which is what allows
-`style-src 'self'` to hold without `'unsafe-inline'`. Setting individual
-properties from JavaScript (`element.style.display = 'none'`) is still used and
-is permitted under CSP.
+**No inline code.** There are no inline `<script>` blocks, no `on*` handler
+attributes, no `javascript:` URLs, and no `eval`. Stylesheets are never inlined
+either (`build.inlineStylesheets: 'never'`), which is what lets `style-src`
+stay `'self'` with no `'unsafe-inline'`.
 
-**Referrer policy.** `<meta name="referrer" content="strict-origin-when-cross-origin">`
-sends only the origin (not the full path) when a visitor follows a link off-site,
-and sends nothing at all when downgrading from HTTPS to HTTP.
+**Untrusted content is escaped.** Copy comes from the database, which means it
+comes from whatever staff typed into the admin area. The helpers in
+`src/lib/format.ts` escape first and add the small amount of markup the design
+needs second, so a stray tag in a headline renders as visible text.
 
-**Framing check.** A meta-tag CSP cannot set `frame-ancestors`, so `assets/js/main.js`
-begins with a clickjacking guard: if the page finds itself inside a frame it tries
-to navigate the top-level window to itself, and if that is blocked it hides the
-page content instead. This is defence in depth, not a substitute for a real
-response header.
+**Link URLs are constrained at two levels.** `news_sources.url` has a database
+check constraint requiring `http(s)`, and `safeUrl()` re-checks at render time.
+A `javascript:` URL cannot reach a link's `href` even if a form is bypassed.
 
-**`X-Content-Type-Options` removed.** The original file carried
-`<meta http-equiv="X-Content-Type-Options" content="nosniff">`. Browsers ignore
-this directive when it arrives as a `<meta>` tag — it is only honoured as an HTTP
-response header — so it was removed rather than left in place giving a false
-sense of protection. GitHub Pages already sends `X-Content-Type-Options: nosniff`
-on its own responses.
+**Open-redirect guard on sign-in.** The login form's `?next` parameter is
+rejected unless it begins `/admin`. Protocol-relative values (`//evil.test`)
+are rejected too.
 
-**`security.txt`.** `/.well-known/security.txt` gives researchers a documented
-way to reach us. The `.nojekyll` file at the repository root is what makes the
-`.well-known/` directory publish at all — Jekyll would otherwise skip
-directories beginning with a dot.
+**Sign-out is POST only.** A GET endpoint would let any page on the internet
+sign the academy out with an `<img>` tag.
 
-## GitHub Pages limitations
+**Sign-in does not confirm which accounts exist.** A failure reports only that
+the email and password did not match.
 
-GitHub Pages serves static files and does not let a repository set custom HTTP
-response headers. There is no `.htaccess`, no `_headers` file, and no server-side
-configuration. As a result the following **cannot** be set from this repository:
+**Service role key is server-only.** It bypasses row level security and is read
+exclusively in `src/lib/supabase/server.ts`, never imported into anything that
+ships to the browser. In production it is a Wrangler secret.
 
-| Protection | Why it needs a header |
-| --- | --- |
-| `Content-Security-Policy: frame-ancestors` | Ignored in a `<meta>` tag; only valid as a header. The JavaScript framing check above is the partial substitute. |
-| `X-Frame-Options` | Header-only. Same gap as `frame-ancestors`. |
-| `X-Content-Type-Options` | Header-only. GitHub Pages happens to send it, but the repository cannot control or guarantee it. |
-| `Permissions-Policy` | Header-only. Camera, microphone, geolocation and similar features cannot be switched off from here. |
-| `Strict-Transport-Security` (custom `max-age`, `includeSubDomains`, `preload`) | Header-only. GitHub Pages sends its own HSTS header for `*.github.io`; for a custom domain it sends one once **Enforce HTTPS** is enabled in Settings → Pages, but the values are not configurable. |
+**Audit log.** `public.audit_log` is append-only: readable with `audit.read`,
+and writable by no policy at all. Rows arrive only through a `security definer`
+function.
 
-To set any of these, the site would need a CDN or reverse proxy in front of it
-that can add response headers — Cloudflare (free tier, via Transform Rules or a
-Worker) is the usual choice. That is a hosting change, not a code change, and
-nothing in this repository would need to be modified.
+## Changes from the previous hosting
+
+The previous build ran on GitHub Pages, which cannot set response headers. Four
+protections were documented there as unfixable: `frame-ancestors`,
+`X-Frame-Options`, `Permissions-Policy` and a controllable HSTS. All four are
+now set as real headers.
+
+The JavaScript clickjacking guard that stood in for them has been removed
+rather than kept. It is redundant: `frame-ancestors 'none'` is enforced by the
+browser before any page script runs.
+
+The `<meta http-equiv="X-Content-Type-Options">` tag is also gone. Browsers
+ignore that directive in a `<meta>` tag; it is now sent as a real header.
 
 ## Known gaps
 
-- **Hero photograph.** The homepage hero background still loads from
-  `images.unsplash.com`, so `img-src` in the CSP allows that one origin. The file
-  could not be downloaded and self-hosted from the build environment because
-  outbound access to Unsplash was blocked. Self-hosting it as
-  `assets/img/hero.jpg` and tightening `img-src` back to `'self'` is a small,
-  worthwhile follow-up.
-- **No integrity pinning needed.** Because assets are local, Subresource
-  Integrity hashes are unnecessary; the files are versioned in git.
+- **Hero photograph.** The previous build loaded it from `images.unsplash.com`.
+  The rebuild references a self-hosted `/img/hero.jpg` that has not been added
+  yet, so the hero currently renders with its gradient alone. `img-src` is
+  already `'self' data:` — no third-party origin is permitted.
+- **No automated dependency scanning.** Worth adding Dependabot or `npm audit`
+  in CI.
+- **No rate limiting on sign-in.** Supabase applies its own limits, but a
+  Cloudflare rate-limiting rule on `/admin/login` would be a sensible addition
+  before the account list grows.

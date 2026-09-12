@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 672" role="img" aria-label="Academy seal: Train, Qualify, Protect">
+  <defs>
+    <pattern id="hatch2" width="14" height="14" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+      <rect width="14" height="14" fill="#0F1114"/>
+      <line x1="0" y1="0" x2="0" y2="14" stroke="#16181D" stroke-width="6"/>
+    </pattern>
+    <linearGradient id="goldEdge2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#E2C482"/>
+      <stop offset="0.5" stop-color="#C5A059"/>
+      <stop offset="1" stop-color="#8F6F35"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="672" fill="url(#hatch2)"/>
+  <rect x="14" y="14" width="772" height="644" fill="none" stroke="#2A2D33" stroke-width="1"/>
+  <g stroke="#C5A059" stroke-width="3">
+    <path d="M 30 62 V 30 H 62" fill="none"/>
+    <path d="M 738 30 H 770 V 62" fill="none"/>
+    <path d="M 770 610 V 642 H 738" fill="none"/>
+    <path d="M 62 642 H 30 V 610" fill="none"/>
+  </g>
+  <circle cx="400" cy="320" r="220" fill="#14161B" stroke="url(#goldEdge2)" stroke-width="6"/>
+  <circle cx="400" cy="320" r="158" fill="none" stroke="#2A2D33" stroke-width="1"/>
+  <circle cx="400" cy="320" r="145" fill="#9B1B1B" stroke="url(#goldEdge2)" stroke-width="4"/>
+  <circle cx="400" cy="320" r="133" fill="none" stroke="#0F1114" stroke-width="2" opacity="0.5"/>
+  <g font-family="Montserrat, sans-serif" font-weight="900" font-size="23" fill="#C5A059">
+    <text x="232.8" y="250.6" text-anchor="middle" transform="rotate(-67.5 232.8 250.6)">T</text>
+    <text x="240.4" y="234.6" text-anchor="middle" transform="rotate(-61.8 240.4 234.6)">R</text>
+    <text x="249.6" y="219.4" text-anchor="middle" transform="rotate(-56.2 249.6 219.4)">A</text>
+    <text x="260.1" y="205.1" text-anchor="middle" transform="rotate(-50.6 260.1 205.1)">I</text>
+    <text x="272.1" y="192.0" text-anchor="middle" transform="rotate(-45.0 272.1 192.0)">N</text>
+    <text x="299.5" y="169.5" text-anchor="middle" transform="rotate(-33.7 299.5 169.5)">•</text>
+    <text x="330.8" y="152.8" text-anchor="middle" transform="rotate(-22.5 330.8 152.8)">Q</text>
+    <text x="347.5" y="146.8" text-anchor="middle" transform="rotate(-16.9 347.5 146.8)">U</text>
+    <text x="364.7" y="142.5" text-anchor="middle" transform="rotate(-11.2 364.7 142.5)">A</text>
+    <text x="382.3" y="139.9" text-anchor="middle" transform="rotate(-5.6 382.3 139.9)">L</text>
+    <text x="400.0" y="139.0" text-anchor="middle" transform="rotate(0.0 400.0 139.0)">I</text>
+    <text x="417.7" y="139.9" text-anchor="middle" transform="rotate(5.6 417.7 139.9)">F</text>
+    <text x="435.3" y="142.5" text-anchor="middle" transform="rotate(11.2 435.3 142.5)">Y</text>
+    <text x="469.2" y="152.8" text-anchor="middle" transform="rotate(22.5 469.2 152.8)">•</text>
+    <text x="500.5" y="169.5" text-anchor="middle" transform="rotate(33.7 500.5 169.5)">P</text>
+    <text x="514.8" y="180.0" text-anchor="middle" transform="rotate(39.4 514.8 180.0)">R</text>
+    <text x="527.9" y="192.0" text-anchor="middle" transform="rotate(45.0 527.9 192.0)">O</text>
+    <text x="539.9" y="205.1" text-anchor="middle" transform="rotate(50.6 539.9 205.1)">T</text>
+    <text x="550.4" y="219.4" text-anchor="middle" transform="rotate(56.2 550.4 219.4)">E</text>
+    <text x="559.6" y="234.6" text-anchor="middle" transform="rotate(61.8 559.6 234.6)">C</text>
+    <text x="567.2" y="250.6" text-anchor="middle" transform="rotate(67.5 567.2 250.6)">T</text>
+  </g>
+  <g font-family="Montserrat, sans-serif" font-weight="700" font-size="16" fill="#8E9196">
+    <text x="255.5" y="458.3" text-anchor="middle" transform="rotate(46.3 255.5 458.3)">S</text>
+    <text x="264.7" y="467.3" text-anchor="middle" transform="rotate(42.6 264.7 467.3)">T</text>
+    <text x="274.5" y="475.7" text-anchor="middle" transform="rotate(38.9 274.5 475.7)">A</text>
+    <text x="284.8" y="483.5" text-anchor="middle" transform="rotate(35.2 284.8 483.5)">T</text>
+    <text x="295.6" y="490.6" text-anchor="middle" transform="rotate(31.5 295.6 490.6)">E</text>
+    <text x="306.8" y="497.0" text-anchor="middle" transform="rotate(27.8 306.8 497.0)">-</text>
+    <text x="318.5" y="502.6" text-anchor="middle" transform="rotate(24.1 318.5 502.6)">A</text>
+    <text x="330.4" y="507.5" text-anchor="middle" transform="rotate(20.4 330.4 507.5)">P</text>
+    <text x="342.7" y="511.6" text-anchor="middle" transform="rotate(16.7 342.7 511.6)">P</text>
+    <text x="355.2" y="514.9" text-anchor="middle" transform="rotate(13.0 355.2 514.9)">R</text>
+    <text x="367.8" y="517.4" text-anchor="middle" transform="rotate(9.3 367.8 517.4)">O</text>
+    <text x="380.7" y="519.1" text-anchor="middle" transform="rotate(5.6 380.7 519.1)">V</text>
+    <text x="393.5" y="519.9" text-anchor="middle" transform="rotate(1.9 393.5 519.9)">E</text>
+    <text x="406.5" y="519.9" text-anchor="middle" transform="rotate(-1.9 406.5 519.9)">D</text>
+    <text x="432.2" y="517.4" text-anchor="middle" transform="rotate(-9.3 432.2 517.4)">I</text>
+    <text x="444.8" y="514.9" text-anchor="middle" transform="rotate(-13.0 444.8 514.9)">N</text>
+    <text x="457.3" y="511.6" text-anchor="middle" transform="rotate(-16.7 457.3 511.6)">S</text>
+    <text x="469.6" y="507.5" text-anchor="middle" transform="rotate(-20.4 469.6 507.5)">T</text>
+    <text x="481.5" y="502.6" text-anchor="middle" transform="rotate(-24.1 481.5 502.6)">R</text>
+    <text x="493.2" y="497.0" text-anchor="middle" transform="rotate(-27.8 493.2 497.0)">U</text>
+    <text x="504.4" y="490.6" text-anchor="middle" transform="rotate(-31.5 504.4 490.6)">C</text>
+    <text x="515.2" y="483.5" text-anchor="middle" transform="rotate(-35.2 515.2 483.5)">T</text>
+    <text x="525.5" y="475.7" text-anchor="middle" transform="rotate(-38.9 525.5 475.7)">I</text>
+    <text x="535.3" y="467.3" text-anchor="middle" transform="rotate(-42.6 535.3 467.3)">O</text>
+    <text x="544.5" y="458.3" text-anchor="middle" transform="rotate(-46.3 544.5 458.3)">N</text>
+  </g>
+  <path d="M 400.0 224.0 L 411.8 259.8 L 449.5 259.9 L 419.0 282.2 L 430.6 318.1 L 400.0 296.0 L 369.4 318.1 L 381.0 282.2 L 350.5 259.9 L 388.2 259.8 Z" fill="url(#goldEdge2)"/>
+  <text x="400" y="374" text-anchor="middle" font-family="Montserrat, sans-serif" font-weight="900" font-size="48" fill="#F1E3C4" letter-spacing="2">130+</text>
+  <text x="400" y="400" text-anchor="middle" font-family="Montserrat, sans-serif" font-weight="700" font-size="12" fill="#E2C482" letter-spacing="2">YEARS COMBINED SERVICE</text>
+  <rect x="196" y="576" width="408" height="42" fill="#14161B" stroke="url(#goldEdge2)" stroke-width="2"/>
+  <text x="400" y="603" text-anchor="middle" font-family="Montserrat, sans-serif" font-weight="900" font-size="17" fill="#C5A059" letter-spacing="5">LAW ENFORCEMENT TRAINED</text>
+</svg>

@@ -1,0 +1,118 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import { outranks } from '../../../lib/auth/session';
+
+const { supabase, session } = Astro.locals;
+
+type RoleRow = {
+  id: string;
+  key: string;
+  name: string;
+  description: string | null;
+  level: number;
+  is_system: boolean;
+  role_permissions: { permission_key: string }[];
+  user_roles: { user_id: string }[];
+};
+
+let roles: RoleRow[] = [];
+let loadError: string | null = null;
+
+if (supabase) {
+  const { data, error } = await supabase
+    .from('roles')
+    .select(
+      'id, key, name, description, level, is_system, role_permissions(permission_key), user_roles(user_id)',
+    )
+    .order('level');
+  if (error) loadError = error.message;
+  else
+    roles = // Cast through unknown: src/lib/supabase/database.types.ts is still the
+      // placeholder, so Supabase cannot infer the shape of an embedded join. This
+      // narrows correctly on its own once `npm run db:types` has been run.
+      (data ?? []) as unknown as RoleRow[];
+}
+---
+
+<AdminLayout title="Roles & permissions">
+  <div class="admin-head">
+    <h1>Roles &amp; permissions</h1>
+    <p>
+      A role is a named bundle of permissions. Changing one changes what every account holding it
+      can do, immediately. Roles are ranked: a lower level means more authority, and an account can
+      only administer accounts and roles below its own rank.
+    </p>
+  </div>
+
+  {loadError && <div class="notice error">{loadError}</div>}
+
+  <div class="admin-card">
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th style="width:60px">Rank</th>
+          <th>Role</th>
+          <th style="width:110px">Permissions</th>
+          <th style="width:90px">People</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {
+          roles.map((role) => (
+            <tr>
+              <td>
+                <span class="badge-role">{role.level}</span>
+              </td>
+              <td>
+                <strong>{role.name}</strong>
+                {role.is_system && (
+                  <span class="badge-role" style="margin-left:8px">
+                    Built in
+                  </span>
+                )}
+                <br />
+                <span style="color:var(--text-muted);font-size:0.84rem">{role.description}</span>
+              </td>
+              <td>{role.role_permissions?.length ?? 0}</td>
+              <td>{role.user_roles?.length ?? 0}</td>
+              <td style="text-align:right">
+                {outranks(session, role.level) ? (
+                  <a href={`/admin/roles/${role.id}`}>Edit</a>
+                ) : (
+                  <span
+                    style="color:var(--text-faint);font-size:0.8rem"
+                    title="This role is at or above your own level"
+                  >
+                    —
+                  </span>
+                )}
+              </td>
+            </tr>
+          ))
+        }
+        {
+          roles.length === 0 && !loadError && (
+            <tr>
+              <td colspan="5" style="color:var(--text-muted)">
+                No roles found. Run the seed migration (supabase/migrations/0003_seed_roles.sql).
+              </td>
+            </tr>
+          )
+        }
+      </tbody>
+    </table>
+  </div>
+
+  <div class="admin-card">
+    <h2>How the ranking works</h2>
+    <p>
+      Permissions decide what you can do to the <em>website</em>. The rank decides what you can do
+      to
+      <em>other people</em>. They are kept separate on purpose: without the rank, any account
+      holding "Manage staff accounts" could give itself every other permission in one click. With
+      it, an Administrator can manage Editors and Instructors and can never touch an Owner, another
+      Administrator, or their own access.
+    </p>
+  </div>
+</AdminLayout>

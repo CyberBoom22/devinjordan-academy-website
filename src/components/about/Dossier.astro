@@ -1,0 +1,171 @@
+---
+/**
+ * Leadership dossier — the signature element of the About page. A service
+ * record laid out as a file rather than a paragraph of prose.
+ */
+import type { Instructor } from '../../lib/content/types';
+
+interface Props {
+  instructor: Instructor;
+}
+
+const { instructor } = Astro.props;
+---
+
+<article class="dossier anim-snap-up">
+  <div class="dossier-photo">
+    {
+      instructor.photoUrl && (
+        <img
+          src={instructor.photoUrl}
+          alt={instructor.photoAlt ?? instructor.name}
+          width="240"
+          height="240"
+          loading="lazy"
+        />
+      )
+    }
+    {instructor.badge && <span class="badge">{instructor.badge}</span>}
+  </div>
+
+  <div class="dossier-body">
+    <h3>{instructor.name}</h3>
+    {instructor.roleTitle && <span class="dossier-role">{instructor.roleTitle}</span>}
+    {instructor.bio && <p>{instructor.bio}</p>}
+
+    {
+      instructor.records.length > 0 && (
+        <ul class="record-list">
+          {instructor.records.map((record) => (
+            <li>
+              <span class="rec-label">{record.label}</span>
+              <span class="rec-value">{record.value}</span>
+            </li>
+          ))}
+        </ul>
+      )
+    }
+  </div>
+</article>
+
+<style>
+  .dossier {
+    background: var(--bg-card);
+    border: 1px solid var(--border-card);
+    border-radius: var(--radius);
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    overflow: hidden;
+  }
+
+  .dossier-photo {
+    background: var(--bg-deep);
+    border-right: 1px solid var(--border-card);
+    padding: 40px 30px;
+    text-align: center;
+  }
+
+  .dossier-photo img {
+    width: 100%;
+    max-width: 240px;
+    aspect-ratio: 1 / 1;
+    object-fit: cover;
+    border-radius: var(--radius);
+    border: 3px solid var(--primary);
+    background: var(--bg-dark);
+  }
+
+  .dossier-photo .badge {
+    display: inline-block;
+    margin-top: 22px;
+    font-family: var(--font-heading);
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    padding: 7px 14px;
+    border-radius: var(--radius-sm);
+  }
+
+  .dossier-body {
+    padding: 44px;
+  }
+
+  .dossier-body h3 {
+    font-size: 2.1rem;
+    color: var(--text-bright);
+    line-height: 1.1;
+  }
+
+  .dossier-role {
+    display: block;
+    font-family: var(--font-heading);
+    font-weight: 700;
+    font-size: 0.85rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 10px 0 24px 0;
+  }
+
+  .dossier-body p {
+    color: var(--text-muted);
+    margin-bottom: 26px;
+  }
+
+  .record-list {
+    list-style: none;
+    border-top: 1px solid var(--hairline);
+  }
+
+  .record-list li {
+    display: grid;
+    grid-template-columns: 190px 1fr;
+    gap: 20px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--hairline);
+    font-size: 0.95rem;
+  }
+
+  .rec-label {
+    font-family: var(--font-heading);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--primary);
+    padding-top: 3px;
+  }
+
+  .rec-value {
+    color: var(--text-main);
+  }
+
+  @media (max-width: 1000px) {
+    .dossier {
+      grid-template-columns: 1fr;
+    }
+
+    .dossier-photo {
+      border-right: none;
+      border-bottom: 1px solid var(--border-card);
+    }
+
+    .dossier-body {
+      padding: 34px 26px;
+    }
+  }
+
+  @media (max-width: 900px) {
+    .dossier-body h3 {
+      font-size: 1.6rem;
+    }
+
+    .record-list li {
+      grid-template-columns: 1fr;
+      gap: 4px;
+    }
+  }
+</style>

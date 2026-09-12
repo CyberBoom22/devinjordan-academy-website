@@ -1,0 +1,196 @@
+---
+/**
+ * Admin shell.
+ *
+ * The sidebar is built from the session's permissions, so a Viewer and an Owner
+ * signing in see genuinely different navigation rather than the same links with
+ * half of them erroring on click. Nothing here is a security boundary — the
+ * database refuses the write either way — it is about not showing someone a
+ * door they cannot open.
+ */
+import '../styles/base.css';
+import '../styles/admin.css';
+import { canAny } from '../lib/auth/session';
+import type { Permission } from '../lib/auth/permissions';
+
+interface Props {
+  title: string;
+  description?: string;
+}
+
+const { title, description } = Astro.props;
+const { session } = Astro.locals;
+const user = session.user;
+
+/**
+ * `ready: false` marks a screen that is designed and permissioned but not yet
+ * built. It is rendered as a disabled row rather than hidden, so the academy
+ * can see what is coming, and rather than linked, so nobody lands on a 404.
+ */
+type NavItem = {
+  href: string;
+  label: string;
+  icon: string;
+  needs: Permission[];
+  ready?: boolean;
+};
+type NavGroup = { group: string; items: NavItem[] };
+
+const NAV: NavGroup[] = [
+  {
+    group: 'Overview',
+    items: [
+      { href: '/admin', label: 'Dashboard', icon: 'fa-solid fa-gauge', needs: ['admin.access'] },
+    ],
+  },
+  {
+    group: 'Content',
+    items: [
+      {
+        href: '/admin/courses',
+        label: 'Courses & tuition',
+        icon: 'fa-solid fa-graduation-cap',
+        needs: ['course.read'],
+      },
+      {
+        href: '/admin/instructors',
+        label: 'Instructors',
+        icon: 'fa-solid fa-user-shield',
+        needs: ['instructor.read'],
+      },
+      {
+        href: '/admin/news',
+        label: 'News & legislation',
+        icon: 'fa-solid fa-gavel',
+        needs: ['news.read'],
+      },
+      {
+        href: '/admin/ori',
+        label: 'ORI directory',
+        icon: 'fa-solid fa-fingerprint',
+        needs: ['ori.read'],
+      },
+      {
+        href: '/admin/pages',
+        label: 'Page copy',
+        icon: 'fa-solid fa-file-lines',
+        needs: ['page.read'],
+      },
+    ],
+  },
+  {
+    group: 'Academy',
+    items: [
+      {
+        href: '/admin/enquiries',
+        label: 'Enquiries',
+        icon: 'fa-solid fa-envelope',
+        needs: ['enquiry.read'],
+      },
+      {
+        href: '/admin/settings',
+        label: 'Site settings',
+        icon: 'fa-solid fa-sliders',
+        needs: ['settings.read'],
+      },
+    ],
+  },
+  {
+    group: 'Access',
+    items: [
+      {
+        href: '/admin/users',
+        label: 'Staff accounts',
+        icon: 'fa-solid fa-users',
+        needs: ['user.read'],
+      },
+      {
+        href: '/admin/roles',
+        label: 'Roles & permissions',
+        icon: 'fa-solid fa-key',
+        needs: ['role.manage'],
+      },
+      {
+        href: '/admin/audit',
+        label: 'Audit log',
+        icon: 'fa-solid fa-clipboard-list',
+        needs: ['audit.read'],
+      },
+    ],
+  },
+];
+
+const path = Astro.url.pathname.replace(/\/$/, '') || '/admin';
+
+const visibleGroups = NAV.map((group) => ({
+  ...group,
+  items: group.items.filter((item) => canAny(session, ...item.needs)),
+})).filter((group) => group.items.length > 0);
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{title} | Academy admin</title>
+    {description && <meta name="description" content={description} />}
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/assets/css/fonts.css" />
+    <link rel="stylesheet" href="/assets/vendor/fontawesome-free-6.4.0/css/all.min.css" />
+  </head>
+
+  <body>
+    <a class="skip-link" href="#admin-main">Skip to content</a>
+
+    <div class="admin-shell">
+      <aside class="admin-sidebar">
+        <a href="/admin" class="admin-brand">
+          <img src="/img/logo.webp" alt="" width="230" height="230" />
+          <span>Academy<br />Admin</span>
+        </a>
+
+        <nav class="admin-nav" aria-label="Admin">
+          {
+            visibleGroups.map((group) => (
+              <>
+                <div class="admin-nav-group">{group.group}</div>
+                {group.items.map((item) => (
+                  <a
+                    href={item.href}
+                    aria-current={
+                      path === item.href || path.startsWith(`${item.href}/`) ? 'page' : undefined
+                    }
+                  >
+                    <i class={item.icon} aria-hidden="true" />
+                    {item.label}
+                  </a>
+                ))}
+              </>
+            ))
+          }
+        </nav>
+
+        <div class="admin-user">
+          <strong>{user?.fullName ?? user?.email}</strong>
+          {user?.fullName && <span>{user.email}</span>}
+          <div class="admin-roles">
+            {user?.roles.map((role) => <span class="badge-role">{role.name}</span>)}
+            {user?.roles.length === 0 && <span class="badge-role">No role</span>}
+          </div>
+          <form method="POST" action="/admin/logout" style="margin-top:14px">
+            <button type="submit" class="btn-admin secondary">Sign out</button>
+          </form>
+          <p style="margin-top:14px">
+            <a href="/" style="color:var(--text-muted);font-size:0.8rem">← View the website</a>
+          </p>
+        </div>
+      </aside>
+
+      <main class="admin-main" id="admin-main">
+        <slot />
+      </main>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,78 @@
+---
+/**
+ * Homepage hero.
+ *
+ * Sized from viewport WIDTH, never height. The original had to avoid 100vh
+ * because it ran inside a Wix iframe that auto-sized to its content, so a
+ * height-based hero fed its own measurement. The constraint is gone, but
+ * width-based sizing is still the better behaviour: it keeps the headline and
+ * the button on screen together on a short laptop window instead of pushing
+ * the call to action below the fold.
+ */
+interface Props {
+  line1: string;
+  line2: string;
+  line3: string;
+  subheading: string;
+  ctaLabel: string;
+  ctaHref?: string;
+}
+
+const { line1, line2, line3, subheading, ctaLabel, ctaHref = '/#services' } = Astro.props;
+---
+
+<section id="home" class="hero">
+  <div>
+    <h1 class="anim-enter-up is-visible">
+      <span class="highlight-red">{line1}</span><br />
+      {line2}
+      <span class="highlight-red">{line3}</span>
+    </h1>
+    <h2 class="anim-enter-up delay-1 is-visible">{subheading}</h2>
+    <a href={ctaHref} class="btn anim-enter-up delay-2 is-visible">{ctaLabel}</a>
+  </div>
+</section>
+
+<style>
+  .hero {
+    height: auto;
+    min-height: clamp(560px, 62vw, 820px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    /* The gradient is listed first so that if the photograph is missing the
+       section still renders as an intentional dark panel rather than a gap. */
+    background:
+      linear-gradient(to bottom, rgba(10, 11, 13, 0.75), rgba(18, 20, 24, 1)),
+      url('/img/hero.jpg') center / cover no-repeat,
+      var(--bg-dark);
+    padding: 120px 20px 0 20px;
+  }
+
+  .hero h1 {
+    font-size: 4.5rem;
+    font-weight: 900;
+    line-height: 1.1;
+    margin-bottom: 10px;
+    color: var(--text-main);
+  }
+
+  .hero h2 {
+    color: var(--accent);
+    font-size: 1.8rem;
+    letter-spacing: 2px;
+    margin-bottom: 40px;
+    text-shadow: 0 4px 10px rgba(0, 0, 0, 0.8);
+  }
+
+  @media (max-width: 900px) {
+    .hero h1 {
+      font-size: 3rem;
+    }
+
+    .hero h2 {
+      font-size: 1.3rem;
+    }
+  }
+</style>

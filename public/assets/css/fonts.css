@@ -1,0 +1,59 @@
+/* ==========================================================================
+   Self-hosted webfonts — Montserrat and Roboto, Latin subset, woff2.
+   Replaces the former Google Fonts <link>, so the page makes no
+   third-party requests and works under a strict Content Security Policy.
+
+   Files came from the @fontsource/montserrat and @fontsource/roboto
+   packages. Both faces are licensed under the SIL Open Font License 1.1 —
+   see OFL-Montserrat.txt and OFL-Roboto.txt in assets/fonts/.
+   ========================================================================== */
+
+/* --- Montserrat: headings, navigation, labels --- */
+@font-face {
+  font-family: 'Montserrat';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/montserrat-latin-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Montserrat';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../fonts/montserrat-latin-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Montserrat';
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url('../fonts/montserrat-latin-900-normal.woff2') format('woff2');
+}
+
+/* --- Roboto: body copy and form fields --- */
+@font-face {
+  font-family: 'Roboto';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/roboto-latin-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Roboto';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('../fonts/roboto-latin-500-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Roboto';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../fonts/roboto-latin-700-normal.woff2') format('woff2');
+}

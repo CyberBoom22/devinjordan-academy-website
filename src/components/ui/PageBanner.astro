@@ -1,0 +1,70 @@
+---
+/**
+ * The banner at the top of every interior page: eyebrow, headline with an
+ * accented phrase, a short rule, and an intro paragraph.
+ */
+import { renderCopy } from '../../lib/format';
+
+interface Props {
+  eyebrow?: string;
+  /** Wrap a phrase in {{braces}} to colour it maroon. */
+  heading: string;
+  intro?: string;
+}
+
+const { eyebrow, heading, intro } = Astro.props;
+---
+
+<header class="page-banner">
+  {eyebrow && <span class="eyebrow anim-enter-up">{eyebrow}</span>}
+  <h1 class="anim-enter-up delay-1" set:html={renderCopy(heading, 'primary')} />
+  <div class="banner-rule"></div>
+  {intro && <p class="anim-enter-up delay-2">{intro}</p>}
+</header>
+
+<style>
+  .page-banner {
+    padding: 190px 20px 90px 20px;
+    text-align: center;
+    background:
+      radial-gradient(ellipse at 50% -20%, rgba(155, 27, 27, 0.28), transparent 60%),
+      repeating-linear-gradient(45deg, #0e1013 0, #0e1013 10px, #101216 10px, #101216 20px),
+      var(--bg-dark);
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  .page-banner h1 {
+    font-size: 3.6rem;
+    font-weight: 900;
+    line-height: 1.05;
+    color: var(--text-main);
+  }
+
+  .page-banner h1 :global(.primary) {
+    color: var(--primary);
+  }
+
+  .banner-rule {
+    width: 90px;
+    height: 3px;
+    background: var(--primary);
+    margin: 26px auto 20px auto;
+  }
+
+  .page-banner p {
+    color: var(--text-muted);
+    max-width: 640px;
+    margin: 0 auto;
+    font-size: 1.05rem;
+  }
+
+  @media (max-width: 900px) {
+    .page-banner {
+      padding: 150px 20px 70px 20px;
+    }
+
+    .page-banner h1 {
+      font-size: 2.4rem;
+    }
+  }
+</style>

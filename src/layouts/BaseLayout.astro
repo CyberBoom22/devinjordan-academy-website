@@ -1,0 +1,145 @@
+---
+/**
+ * The page shell every public page renders inside.
+ *
+ * Holds the document head, the fixed header with its centred logo, the
+ * find-in-page bar and the footer. Pages supply only their own content.
+ */
+import '../styles/base.css';
+import Preloader from '../components/layout/Preloader.astro';
+import Nav from '../components/layout/Nav.astro';
+import FindBar from '../components/layout/FindBar.astro';
+import Footer from '../components/layout/Footer.astro';
+import { getSettings } from '../lib/content/repository';
+
+interface Props {
+  title?: string;
+  description?: string;
+  /** Omit the trailing site name — used for the homepage, whose title is the site name. */
+  bareTitle?: boolean;
+}
+
+const { title, description, bareTitle = false } = Astro.props;
+
+const settings = await getSettings(Astro.locals.supabase);
+const siteName = settings['site.name'] ?? 'Devin Jordan Security Training Academy';
+const pageTitle = title ? (bareTitle ? title : `${title} | ${siteName}`) : siteName;
+const pageDescription = description ?? settings['site.description'] ?? '';
+const canonical = new URL(Astro.url.pathname, Astro.site ?? Astro.url.origin).href;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{pageTitle}</title>
+    <meta name="description" content={pageDescription} />
+    <link rel="canonical" href={canonical} />
+
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <meta name="theme-color" content="#0a0b0d" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={siteName} />
+    <meta property="og:title" content={pageTitle} />
+    <meta property="og:description" content={pageDescription} />
+    <meta property="og:url" content={canonical} />
+    <meta
+      property="og:image"
+      content={new URL('/img/og-card.png', Astro.site ?? Astro.url.origin).href}
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/img/apple-touch-icon.png" />
+
+    {/* Self-hosted, so the page makes no third-party requests at all. */}
+    <link rel="stylesheet" href="/assets/css/fonts.css" />
+    <link rel="stylesheet" href="/assets/vendor/fontawesome-free-6.4.0/css/all.min.css" />
+
+    {
+      /* Local business markup: this is a training academy with one address and
+        two phone numbers, and search engines surface exactly that. */
+    }
+    <script
+      is:inline
+      type="application/ld+json"
+      set:html={JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'EducationalOrganization',
+        name: siteName,
+        description: pageDescription,
+        url: canonical,
+        telephone: [settings['contact.primary.phone'], settings['contact.secondary.phone']].filter(
+          Boolean,
+        ),
+        address: {
+          '@type': 'PostalAddress',
+          streetAddress: settings['contact.address.street'],
+          addressLocality: 'Irvington',
+          addressRegion: 'NJ',
+          postalCode: '07111',
+          addressCountry: 'US',
+        },
+        areaServed: ['New Jersey', 'New York'],
+        slogan: settings['site.tagline'],
+      })}
+    />
+  </head>
+
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <Preloader siteName={siteName} />
+    <Nav />
+    <FindBar />
+
+    <main id="main">
+      <slot />
+    </main>
+
+    <Footer />
+
+    <script>
+      // Behaviour is split by concern and loaded once for the whole site.
+      import '../scripts/preloader';
+      import '../scripts/nav';
+      import '../scripts/reveal';
+      import '../scripts/find';
+      import '../scripts/legacy-hash';
+    </script>
+
+    <noscript>
+      {
+        /* The reveal animations hide content until an observer shows it. With
+          no JavaScript that observer never runs, so the page would be blank.
+          Content comes first: without scripts, everything is simply visible. */
+      }
+      <style>
+        .anim-snap-up,
+        .anim-enter-up,
+        .anim-hard-left,
+        .anim-hard-right {
+          opacity: 1 !important;
+          transform: none !important;
+        }
+
+        #preloader {
+          display: none !important;
+        }
+      </style>
+    </noscript>
+  </body>
+</html>
+
+<style is:global>
+  .accent {
+    color: var(--accent);
+  }
+
+  .highlight-red {
+    color: var(--primary);
+    text-shadow: 0 4px 15px rgba(155, 27, 27, 0.5);
+  }
+</style>

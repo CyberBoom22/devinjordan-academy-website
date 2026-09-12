@@ -1,0 +1,77 @@
+---
+import type { Pillar } from '../../lib/content/types';
+
+interface Props {
+  pillars: Pillar[];
+}
+
+const { pillars } = Astro.props;
+const delayClass = ['', 'delay-1', 'delay-2', 'delay-3'];
+---
+
+{
+  pillars.length > 0 && (
+    <div class="pillars">
+      {pillars.map((pillar, index) => (
+        <div class:list={['pillar', 'anim-snap-up', delayClass[index % delayClass.length]]}>
+          {pillar.icon && <i class={pillar.icon} aria-hidden="true" />}
+          <h3>{pillar.title}</h3>
+          <p>{pillar.body}</p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+<style>
+  .pillars {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+    gap: 25px;
+    margin-bottom: 90px;
+  }
+
+  .pillar {
+    background: var(--bg-card);
+    border: 1px solid var(--border-card);
+    border-top: 3px solid var(--primary);
+    border-radius: var(--radius);
+    padding: 34px 30px;
+    transition:
+      border-color 0.4s var(--ease-overshoot),
+      transform 0.4s var(--ease-overshoot),
+      box-shadow 0.4s var(--ease-overshoot);
+  }
+
+  .pillar:hover {
+    border-color: var(--accent);
+    border-top-color: var(--accent);
+    transform: translateY(-8px);
+    box-shadow: var(--shadow-card);
+  }
+
+  .pillar i {
+    font-size: 1.6rem;
+    color: var(--accent);
+    margin-bottom: 18px;
+    display: block;
+  }
+
+  .pillar h3 {
+    font-size: 1.15rem;
+    color: var(--text-bright);
+    letter-spacing: 1px;
+    margin-bottom: 14px;
+  }
+
+  .pillar p {
+    color: var(--text-muted);
+    font-size: 0.95rem;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .pillar:hover {
+      transform: none;
+    }
+  }
+</style>

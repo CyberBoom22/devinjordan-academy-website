@@ -1,0 +1,103 @@
+---
+import { getSettings } from '../../lib/content/repository';
+import { telHref } from '../../lib/seed/site';
+
+const settings = await getSettings(Astro.locals.supabase);
+
+const year = new Date().getFullYear();
+const primaryPhone = settings['contact.primary.phone'];
+const secondaryPhone = settings['contact.secondary.phone'];
+const street = settings['contact.address.street'];
+const locality = settings['contact.address.locality'];
+const owner = settings['legal.copyright'] ?? settings['site.name'];
+---
+
+<footer>
+  {
+    /* The original footer used a wide wordmark lockup, a separate image from
+      the square badge in the header. Until that file is extracted this shows
+      the badge, which is the same mark at the same height — see README. */
+  }
+  <img
+    src="/img/logo.webp"
+    alt={settings['site.name']}
+    width="230"
+    height="230"
+    loading="lazy"
+    class="footer-logo"
+  />
+
+  <p>Copyright &copy; {year} {owner}</p>
+
+  <p class="footer-details">
+    {
+      street && locality && (
+        <span>
+          {street}, {locality}
+        </span>
+      )
+    }
+    {
+      primaryPhone && (
+        <>
+          {' '}
+          | <a href={telHref(primaryPhone)}>{primaryPhone}</a>
+        </>
+      )
+    }
+    {
+      secondaryPhone && (
+        <>
+          {' '}
+          | <a href={telHref(secondaryPhone)}>{secondaryPhone}</a>
+        </>
+      )
+    }
+  </p>
+
+  <p class="footer-links">
+    <a href="/about">About</a> ·
+    <a href="/news">News</a> ·
+    <a href="/ori">ORI Directory</a> ·
+    <a href="/#contact">Contact</a>
+  </p>
+</footer>
+
+<style>
+  footer {
+    text-align: center;
+    padding: 40px 20px;
+    background: var(--footer-bg);
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    border-top: 1px solid #111;
+  }
+
+  .footer-logo {
+    height: 74px;
+    width: auto;
+    max-width: 90%;
+    object-fit: contain;
+    margin-bottom: 22px;
+  }
+
+  footer a {
+    color: var(--text-muted);
+    text-decoration: none;
+  }
+
+  footer a:hover {
+    color: var(--accent);
+  }
+
+  .footer-details {
+    margin-top: 5px;
+    color: #555;
+  }
+
+  .footer-links {
+    margin-top: 14px;
+    font-size: 0.8rem;
+    letter-spacing: 1px;
+  }
+</style>

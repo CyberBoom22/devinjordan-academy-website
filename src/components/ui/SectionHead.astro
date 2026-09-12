@@ -1,0 +1,36 @@
+---
+import { renderCopy } from '../../lib/format';
+
+interface Props {
+  /** Wrap a phrase in {{braces}} to colour it maroon. */
+  heading: string;
+}
+
+const { heading } = Astro.props;
+---
+
+<div class="section-head anim-enter-up">
+  <h2 set:html={renderCopy(heading, 'em')} />
+</div>
+
+<style>
+  .section-head {
+    margin-bottom: 45px;
+  }
+
+  .section-head h2 {
+    font-size: 2.4rem;
+    color: var(--text-bright);
+    line-height: 1.15;
+  }
+
+  .section-head h2 :global(.em) {
+    color: var(--primary);
+  }
+
+  @media (max-width: 900px) {
+    .section-head h2 {
+      font-size: 1.8rem;
+    }
+  }
+</style>

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Devin Jordan Security Training Academy">
+  <rect width="64" height="64" rx="8" fill="#0A0B0D"/>
+  <path d="M32 8 L52 15 V34 C52 46 43 54 32 58 C21 54 12 46 12 34 V15 Z" fill="#9B1B1B" stroke="#C5A059" stroke-width="3"/>
+  <path d="M32 16 L35.4 26.2 L46.1 26.3 L37.4 32.7 L40.6 42.9 L32 36.7 L23.4 42.9 L26.6 32.7 L17.9 26.3 L28.6 26.2 Z" fill="#C5A059"/>
+  <path d="M17 45 L32 36 L47 45 L47 40 L32 31 L17 40 Z" fill="#0F1114" opacity="0.85"/>
+</svg>

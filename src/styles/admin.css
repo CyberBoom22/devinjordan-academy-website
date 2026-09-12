@@ -1,0 +1,542 @@
+/* ==========================================================================
+   Admin area.
+   
+   Same tokens as the public site, so the academy never feels like they have
+   left their own website — but flatter and denser, because this is a tool
+   rather than a shop window. No scroll animations, no loading screen, nothing
+   that puts a delay between a click and an answer.
+   ========================================================================== */
+
+@import './tokens.css';
+
+.admin-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 260px 1fr;
+}
+
+.admin-sidebar {
+  background: var(--nav-bg);
+  border-right: 1px solid var(--hairline);
+  padding: 24px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.admin-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 24px 22px 24px;
+  border-bottom: 1px solid var(--hairline);
+  margin-bottom: 14px;
+  text-decoration: none;
+}
+
+.admin-brand img {
+  width: 40px;
+  height: 40px;
+}
+
+.admin-brand span {
+  font-family: var(--font-heading);
+  font-weight: 900;
+  font-size: 0.72rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--accent);
+  line-height: 1.3;
+}
+
+.admin-nav-group {
+  padding: 14px 24px 6px 24px;
+  font-family: var(--font-heading);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.admin-nav a {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 24px;
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 0.9rem;
+  border-left: 3px solid transparent;
+  transition:
+    color 0.2s,
+    background 0.2s,
+    border-color 0.2s;
+}
+
+.admin-nav a:hover {
+  color: var(--accent);
+  background: rgba(197, 160, 89, 0.06);
+}
+
+.admin-nav a[aria-current='page'] {
+  color: var(--accent);
+  border-left-color: var(--primary);
+  background: rgba(155, 27, 27, 0.12);
+}
+
+.admin-nav i {
+  width: 18px;
+  text-align: center;
+}
+
+.admin-user {
+  margin-top: auto;
+  padding: 18px 24px 0 24px;
+  border-top: 1px solid var(--hairline);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.admin-user strong {
+  display: block;
+  color: var(--text-main);
+  font-family: var(--font-heading);
+  font-size: 0.8rem;
+  letter-spacing: 1px;
+}
+
+.admin-roles {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.admin-main {
+  padding: 34px 40px 80px 40px;
+  max-width: 1100px;
+}
+
+.admin-head {
+  margin-bottom: 30px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.admin-head h1 {
+  font-size: 1.7rem;
+  color: var(--text-bright);
+  letter-spacing: 1px;
+}
+
+.admin-head p {
+  margin-top: 8px;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+  max-width: 70ch;
+}
+
+/* --- Cards and tables ----------------------------------------------------- */
+.admin-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius);
+  padding: 26px 28px;
+  margin-bottom: 24px;
+}
+
+.admin-card > h2 {
+  font-size: 1rem;
+  letter-spacing: 2px;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+
+.admin-card > h2 + p {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  margin-bottom: 20px;
+  max-width: 70ch;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.admin-table th {
+  text-align: left;
+  font-family: var(--font-heading);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 0 14px 10px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.admin-table td {
+  padding: 13px 14px 13px 0;
+  border-bottom: 1px solid var(--hairline);
+  color: var(--text-main);
+  vertical-align: top;
+}
+
+.admin-table tr:last-child td {
+  border-bottom: none;
+}
+
+.admin-table a {
+  color: var(--accent);
+}
+
+/* --- Badges --------------------------------------------------------------- */
+.badge-role,
+.badge-status {
+  display: inline-block;
+  font-family: var(--font-heading);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 4px 9px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--hairline);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.badge-role {
+  border-color: var(--accent-dark);
+  color: var(--accent);
+}
+
+.badge-status.active {
+  color: var(--status-ok-text);
+  border-color: var(--status-ok-border);
+  background: var(--status-ok-bg);
+}
+
+.badge-status.invited {
+  color: var(--status-warn-text);
+  border-color: var(--status-warn-border);
+  background: var(--status-warn-bg);
+}
+
+.badge-status.suspended {
+  color: var(--status-err-text);
+  border-color: var(--status-err-border);
+  background: var(--status-err-bg);
+}
+
+/* --- Forms ---------------------------------------------------------------- */
+.field {
+  margin-bottom: 18px;
+}
+
+.field label {
+  display: block;
+  font-family: var(--font-heading);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 7px;
+}
+
+.field input[type='text'],
+.field input[type='email'],
+.field input[type='password'],
+.field select,
+.field textarea {
+  width: 100%;
+  padding: 12px 14px;
+  background: var(--bg-dark);
+  border: 1px solid var(--border-input);
+  color: var(--text-main);
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  border-radius: var(--radius-sm);
+  transition: border-color 0.2s;
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.field .hint {
+  margin-top: 6px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.btn-admin {
+  display: inline-block;
+  padding: 12px 26px;
+  background: var(--primary);
+  color: var(--text-bright);
+  border: 1px solid var(--primary-edge);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 0.78rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-admin:hover {
+  background: var(--primary-bright);
+}
+
+.btn-admin.secondary {
+  background: transparent;
+  border-color: var(--hairline);
+  color: var(--text-muted);
+}
+
+.btn-admin.secondary:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: transparent;
+}
+
+.btn-admin:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.form-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--hairline);
+}
+
+/* --- Permission matrix ---------------------------------------------------- */
+.perm-group {
+  margin-bottom: 26px;
+}
+
+.perm-group h3 {
+  font-size: 0.72rem;
+  letter-spacing: 3px;
+  color: var(--primary);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.perm-row {
+  display: grid;
+  grid-template-columns: 26px 1fr;
+  gap: 12px;
+  padding: 10px 0;
+  align-items: start;
+}
+
+.perm-row input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+.perm-row label {
+  cursor: pointer;
+}
+
+.perm-row .perm-label {
+  display: block;
+  color: var(--text-main);
+  font-size: 0.92rem;
+  font-weight: 500;
+}
+
+.perm-row .perm-desc {
+  display: block;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  margin-top: 3px;
+  max-width: 75ch;
+}
+
+.perm-row .perm-key {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-faint);
+}
+
+.perm-row.is-override-grant .perm-label::after {
+  content: 'granted to this person';
+  margin-left: 10px;
+  font-size: 0.62rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--status-ok-text);
+}
+
+.perm-row.is-override-deny .perm-label::after {
+  content: 'denied for this person';
+  margin-left: 10px;
+  font-size: 0.62rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--status-err-text);
+}
+
+/* --- Notices -------------------------------------------------------------- */
+.notice {
+  padding: 14px 18px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--hairline);
+  margin-bottom: 22px;
+  font-size: 0.9rem;
+}
+
+.notice.error {
+  color: var(--status-err-text);
+  border-color: var(--status-err-border);
+  background: var(--status-err-bg);
+}
+
+.notice.success {
+  color: var(--status-ok-text);
+  border-color: var(--status-ok-border);
+  background: var(--status-ok-bg);
+}
+
+.notice.info {
+  color: var(--status-info-text);
+  border-color: var(--status-info-border);
+  background: var(--status-info-bg);
+}
+
+.notice.warn {
+  color: var(--status-warn-text);
+  border-color: var(--status-warn-border);
+  background: var(--status-warn-bg);
+}
+
+/* --- Login ---------------------------------------------------------------- */
+.login-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  background:
+    radial-gradient(ellipse at 50% -10%, rgba(155, 27, 27, 0.25), transparent 60%), var(--bg-dark);
+}
+
+.login-card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-top: 3px solid var(--primary);
+  border-radius: var(--radius);
+  padding: 40px 36px;
+  text-align: left;
+}
+
+.login-card img {
+  width: 84px;
+  height: 84px;
+  display: block;
+  margin: 0 auto 22px auto;
+}
+
+.login-card h1 {
+  font-size: 1.1rem;
+  letter-spacing: 2px;
+  color: var(--text-bright);
+  text-align: center;
+  margin-bottom: 6px;
+}
+
+.login-card .sub {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin-bottom: 28px;
+}
+
+.login-card .btn-admin {
+  width: 100%;
+  text-align: center;
+}
+
+.login-foot {
+  margin-top: 22px;
+  text-align: center;
+  font-size: 0.82rem;
+}
+
+.login-foot a {
+  color: var(--text-muted);
+}
+
+.login-foot a:hover {
+  color: var(--accent);
+}
+
+@media (max-width: 860px) {
+  .admin-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-sidebar {
+    border-right: none;
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  .admin-main {
+    padding: 26px 20px 60px 20px;
+  }
+}
+
+/* A screen that is permissioned and designed but not yet built. Shown so the
+   academy can see what is coming; not a link, so nobody lands on a 404. */
+.admin-nav-soon {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 24px;
+  color: var(--text-faint);
+  font-size: 0.9rem;
+  border-left: 3px solid transparent;
+  cursor: default;
+}
+
+.admin-nav-soon i {
+  width: 18px;
+  text-align: center;
+}
+
+.admin-nav-soon em {
+  margin-left: auto;
+  font-style: normal;
+  font-family: var(--font-heading);
+  font-size: 0.54rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--accent-dark);
+  border: 1px solid var(--accent-dark);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+}

@@ -1,0 +1,139 @@
+---
+/**
+ * Contact block.
+ *
+ * Shows contact details rather than a form, matching the current site: the Wix
+ * embed had no server to receive a submission, so the form was replaced by the
+ * numbers. That constraint is gone now and the `enquiries` table is already in
+ * the schema, so adding the form back is a template change with no migration —
+ * but it is a change to what the page DOES, so it waits to be asked for.
+ */
+import type { ContactMethod } from '../../lib/content/types';
+import { renderCopy } from '../../lib/format';
+
+interface Props {
+  heading: string;
+  subheading: string;
+  methods: ContactMethod[];
+}
+
+const { heading, subheading, methods } = Astro.props;
+---
+
+<section id="contact" class="contact">
+  <div class="contact-container">
+    <div class="contact-text anim-hard-left">
+      <h2 set:html={renderCopy(heading)} />
+    </div>
+
+    <div class="contact-form anim-hard-right">
+      <h3>{subheading}</h3>
+      <div class="contact-details">
+        {
+          methods.map((method) =>
+            method.href ? (
+              <a class="contact-line" href={method.href}>
+                <i class={method.icon} aria-hidden="true" />
+                <span>
+                  <strong>{method.primary}</strong>
+                  <br />
+                  {method.secondary}
+                </span>
+              </a>
+            ) : (
+              <div class="contact-line">
+                <i class={method.icon} aria-hidden="true" />
+                <span>
+                  <strong>{method.primary}</strong>
+                  <br />
+                  {method.secondary}
+                </span>
+              </div>
+            ),
+          )
+        }
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .contact {
+    padding: 100px 50px;
+    background: var(--nav-bg);
+    border-top: 1px solid #222;
+  }
+
+  .contact-container {
+    max-width: var(--wrap);
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 60px;
+    align-items: center;
+  }
+
+  .contact-text h2 {
+    font-size: 4rem;
+    line-height: 1;
+    color: var(--primary);
+    text-shadow: 0 4px 15px rgba(155, 27, 27, 0.4);
+  }
+
+  .contact-form h3 {
+    color: var(--accent);
+    font-size: 2rem;
+    margin-bottom: 30px;
+  }
+
+  .contact-details {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .contact-line {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 18px 4px;
+    border-bottom: 1px solid var(--hairline);
+    color: var(--text-muted);
+    text-decoration: none;
+    transition: color 0.3s;
+  }
+
+  a.contact-line:hover {
+    color: var(--accent);
+  }
+
+  .contact-line i {
+    color: var(--accent);
+    font-size: 1.1rem;
+    width: 26px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+
+  .contact-line strong {
+    color: var(--text-bright);
+    font-family: var(--font-heading);
+    letter-spacing: 1px;
+    font-size: 1.05rem;
+  }
+
+  @media (max-width: 900px) {
+    .contact {
+      padding: 70px 20px;
+    }
+
+    .contact-container {
+      grid-template-columns: 1fr;
+      gap: 40px;
+    }
+
+    .contact-text h2 {
+      font-size: 2.8rem;
+    }
+  }
+</style>

@@ -1,0 +1,161 @@
+---
+/**
+ * The ORI7 / ORI9 explainer. The single most useful thing on this page: people
+ * routinely hand over the seven-character form because a directory listed it
+ * first, and the form is rejected. So the pair is presented as a comparison
+ * with an explicit "use this one".
+ */
+---
+
+<div class="ori-compare">
+  <div class="ori-card anim-hard-left">
+    <div class="ori-card-head">
+      <h3>ORI7</h3>
+      <span class="ori-badge">Short form</span>
+    </div>
+    <div class="ori-sample mono">NJ00101</div>
+    <div class="ori-chars">Seven characters</div>
+    <p>
+      The compact form of the same identifier: the two-letter state code followed by the county and
+      municipality digits. It names the exact same agency as the ORI9 — it is simply truncated.
+    </p>
+    <div class="ori-rule">
+      <strong>When to use it</strong>
+      Only when a form or portal explicitly asks for a seven-character ORI. If the field doesn't say,
+      this is not the one.
+    </div>
+  </div>
+
+  <div class="ori-card is-standard anim-hard-right">
+    <div class="ori-card-head">
+      <h3>ORI9</h3>
+      <span class="ori-badge use-this">Use this one</span>
+    </div>
+    <div class="ori-sample mono">NJ00101<span class="pad">00</span></div>
+    <div class="ori-chars">Nine characters &mdash; ORI7 plus two padding characters</div>
+    <p>
+      The standard nine-character form, and what nearly every fingerprinting appointment, firearms
+      application and background-check form expects. It is the ORI7 with two characters appended to
+      fill the field.
+    </p>
+    <div class="ori-rule">
+      <strong>When to use it</strong>
+      By default. Give the ORI9 unless you are told, in writing, that seven characters are required.
+    </div>
+  </div>
+</div>
+
+<style>
+  .ori-compare {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+    gap: 25px;
+    margin-bottom: 90px;
+  }
+
+  .ori-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-card);
+    border-top: 3px solid var(--hairline);
+    border-radius: var(--radius);
+    padding: 32px 30px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .ori-card.is-standard {
+    border-top-color: var(--primary);
+  }
+
+  .ori-card-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 18px;
+  }
+
+  .ori-card h3 {
+    font-size: 1.25rem;
+    color: var(--text-bright);
+    letter-spacing: 2px;
+  }
+
+  .ori-badge {
+    font-family: var(--font-heading);
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 5px 11px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--hairline);
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  .ori-badge.use-this {
+    color: var(--text-bright);
+    background: var(--primary);
+    border-color: var(--primary-edge);
+  }
+
+  .ori-sample {
+    font-size: 2.1rem;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 4px;
+    line-height: 1.2;
+    word-break: break-all;
+    margin-bottom: 6px;
+  }
+
+  .ori-sample .pad {
+    color: var(--text-bright);
+    background: rgba(155, 27, 27, 0.55);
+    border-radius: var(--radius-sm);
+    padding: 0 4px;
+  }
+
+  .ori-chars {
+    font-family: var(--font-heading);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 18px;
+  }
+
+  .ori-card p {
+    color: var(--text-muted);
+    font-size: 0.95rem;
+    margin-bottom: 14px;
+  }
+
+  .ori-rule {
+    margin-top: auto;
+    border-top: 1px solid var(--hairline);
+    padding-top: 16px;
+    font-size: 0.9rem;
+    color: var(--text-main);
+  }
+
+  .ori-rule strong {
+    display: block;
+    font-family: var(--font-heading);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--primary);
+    margin-bottom: 6px;
+  }
+
+  @media (max-width: 760px) {
+    .ori-sample {
+      font-size: 1.6rem;
+      letter-spacing: 2px;
+    }
+  }
+</style>

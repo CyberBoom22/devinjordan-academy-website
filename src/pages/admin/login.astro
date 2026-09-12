@@ -1,0 +1,121 @@
+---
+/**
+ * Sign in.
+ *
+ * A plain form POST rather than a client-side call, so signing in works before
+ * any JavaScript loads and the session cookie is set by the server in the same
+ * response as the redirect.
+ */
+import '../../styles/base.css';
+import '../../styles/admin.css';
+
+const { supabase, session } = Astro.locals;
+
+/** Only ever redirect to somewhere inside this site's admin area. */
+function safeNext(raw: string | null): string {
+  if (!raw) return '/admin';
+  // A leading `//` or a scheme would take the visitor off-site entirely; an
+  // open redirect on a login form is a phishing primitive, not a nuisance.
+  if (!raw.startsWith('/') || raw.startsWith('//')) return '/admin';
+  return raw.startsWith('/admin') ? raw : '/admin';
+}
+
+const next = safeNext(Astro.url.searchParams.get('next'));
+
+let error: string | null = null;
+let email = '';
+
+// Already signed in and allowed in? Go straight through.
+if (Astro.request.method === 'GET' && session.user && session.permissions.has('admin.access')) {
+  return Astro.redirect(next, 302);
+}
+
+const errorParam = Astro.url.searchParams.get('error');
+if (errorParam === 'suspended') {
+  error = 'That account has been suspended. Ask an administrator to restore it.';
+} else if (errorParam === 'no-access') {
+  error =
+    'That account exists but has not been given access to the admin area. Ask an administrator to assign a role.';
+}
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  email = String(form.get('email') ?? '').trim();
+  const password = String(form.get('password') ?? '');
+
+  if (!supabase) {
+    error = 'Sign-in is unavailable: this deployment has no Supabase connection configured.';
+  } else if (!email || !password) {
+    error = 'Enter your email address and password.';
+  } else {
+    const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
+
+    if (authError) {
+      // Deliberately vague: saying which half was wrong tells an attacker
+      // whether an address is a real account here.
+      error = 'That email address and password do not match an account.';
+    } else {
+      return Astro.redirect(next, 303);
+    }
+  }
+}
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sign in | Academy admin</title>
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/assets/css/fonts.css" />
+  </head>
+
+  <body>
+    <div class="login-shell">
+      <div class="login-card">
+        <img
+          src="/img/logo.webp"
+          alt="Devin Jordan Security Training Academy"
+          width="230"
+          height="230"
+        />
+        <h1>Academy Admin</h1>
+        <p class="sub">Sign in to manage the website.</p>
+
+        {error && <div class="notice error">{error}</div>}
+
+        <form method="POST">
+          <div class="field">
+            <label for="email">Email address</label>
+            <input
+              type="email"
+              id="email"
+              name="email"
+              value={email}
+              autocomplete="username"
+              required
+              autofocus
+            />
+          </div>
+
+          <div class="field">
+            <label for="password">Password</label>
+            <input
+              type="password"
+              id="password"
+              name="password"
+              autocomplete="current-password"
+              required
+            />
+          </div>
+
+          <button type="submit" class="btn-admin">Sign in</button>
+        </form>
+
+        <p class="login-foot"><a href="/">← Back to the website</a></p>
+      </div>
+    </div>
+  </body>
+</html>

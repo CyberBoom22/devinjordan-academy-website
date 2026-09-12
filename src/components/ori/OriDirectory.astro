@@ -1,0 +1,332 @@
+---
+/**
+ * New Jersey ORI directory.
+ *
+ * Like the news board, every row is rendered on the server and the controls
+ * filter what is already there. 640 agencies is a lot of markup, but it is the
+ * content people arrive for — someone searching for their town's ORI should
+ * find this page, and the page should work when they get there.
+ *
+ * The two code formats are never stored separately: an agency has one five
+ * character core, and ORI7 / ORI9 are two lengths of the same identifier.
+ * Storing them apart is how directories end up claiming an agency has two.
+ */
+import type { OriCounty } from '../../lib/content/types';
+import { ori7, ori9 } from '../../lib/seed/ori';
+import { pluralAgencies } from '../../lib/format';
+
+interface Props {
+  counties: OriCounty[];
+}
+
+const { counties } = Astro.props;
+
+const totalAgencies = counties.reduce((sum, county) => sum + county.agencies.length, 0);
+---
+
+<div class="ori-controls">
+  <input
+    type="text"
+    id="oriSearch"
+    class="ori-search"
+    placeholder="Search by agency, town, or code (e.g. Irvington, NJ00713)"
+    autocomplete="off"
+    aria-label="Search agencies and ORI codes"
+  />
+  <select id="oriCounty" class="ori-county-select" aria-label="Filter by county">
+    <option value="">All {counties.length} counties</option>
+    {
+      counties.map((county) => (
+        <option value={county.fips}>
+          {county.name} ({county.agencies.length})
+        </option>
+      ))
+    }
+  </select>
+  <span class="ori-count" id="oriCount" role="status" aria-live="polite">
+    {pluralAgencies(totalAgencies)} in {counties.length} counties
+  </span>
+</div>
+
+<div id="oriList" data-total-agencies={totalAgencies} data-total-counties={counties.length}>
+  {
+    counties.map((county) => (
+      <section class="ori-county" data-county={county.fips}>
+        <div class="ori-county-head">
+          <h3>{county.name}</h3>
+          <span class="ori-fips mono">FIPS {county.fips}</span>
+          <span class="ori-tally" data-total={county.agencies.length}>
+            {pluralAgencies(county.agencies.length)}
+          </span>
+        </div>
+
+        <div class="ori-colhead">
+          <span>Agency</span>
+          <span>ORI7 &mdash; short</span>
+          <span class="col-9">ORI9 &mdash; standard</span>
+        </div>
+
+        {county.agencies.map((agency) => (
+          <div
+            class="ori-row"
+            data-match={`${agency.name} ${ori7(agency.core)} ${ori9(agency.core)}`.toUpperCase()}
+          >
+            <div class="ori-agency">{agency.name}</div>
+
+            {/* The visible code is the accessible name, so the title only has to
+                explain what clicking does. Repeating the code here cost ~50KB
+                across 1,280 buttons and told a screen reader nothing new. */}
+            <button
+              type="button"
+              class="ori-chip chip-7"
+              data-code={ori7(agency.core)}
+              title="Copy ORI7"
+            >
+              <span class="chip-kind">ORI7</span>
+              {ori7(agency.core)}
+            </button>
+
+            <button
+              type="button"
+              class="ori-chip chip-9"
+              data-code={ori9(agency.core)}
+              title="Copy ORI9"
+            >
+              <span class="chip-kind">ORI9</span>
+              {ori9(agency.core)}
+            </button>
+          </div>
+        ))}
+      </section>
+    ))
+  }
+
+  <div class="ori-empty" id="oriEmpty" hidden>
+    <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+    No agency matches that search. Try a town name or the first few characters of the code.
+  </div>
+</div>
+
+<style>
+  .ori-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 26px;
+  }
+
+  .ori-search {
+    flex: 1 1 280px;
+    background: var(--bg-card);
+    border: 1px solid var(--hairline);
+    border-radius: 3px;
+    color: var(--text-main);
+    font-family: var(--font-body);
+    font-size: 0.95rem;
+    padding: 13px 16px;
+  }
+
+  .ori-search::placeholder {
+    color: var(--text-faint);
+  }
+
+  .ori-search:focus,
+  .ori-county-select:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  .ori-county-select {
+    flex: 0 1 240px;
+    background: var(--bg-card);
+    border: 1px solid var(--hairline);
+    border-radius: 3px;
+    color: var(--text-main);
+    font-family: var(--font-heading);
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 13px 14px;
+    cursor: pointer;
+  }
+
+  .ori-count {
+    font-family: var(--font-heading);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--accent);
+    white-space: nowrap;
+  }
+
+  .ori-county {
+    margin-bottom: 38px;
+  }
+
+  .ori-county-head {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    flex-wrap: wrap;
+    border-bottom: 2px solid var(--primary);
+    padding-bottom: 8px;
+    margin-bottom: 4px;
+  }
+
+  .ori-county-head h3 {
+    font-size: 1.2rem;
+    color: var(--text-bright);
+    letter-spacing: 2px;
+  }
+
+  .ori-fips {
+    font-size: 0.68rem;
+    letter-spacing: 2px;
+    color: var(--text-muted);
+  }
+
+  .ori-tally {
+    margin-left: auto;
+    font-family: var(--font-heading);
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .ori-colhead {
+    display: grid;
+    grid-template-columns: 1fr 140px 160px;
+    gap: 14px;
+    padding: 10px 12px 8px 12px;
+    font-family: var(--font-heading);
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .ori-colhead .col-9 {
+    color: var(--primary);
+  }
+
+  .ori-row {
+    display: grid;
+    grid-template-columns: 1fr 140px 160px;
+    gap: 14px;
+    align-items: center;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--hairline);
+    background: var(--bg-card);
+  }
+
+  .ori-row:nth-of-type(odd) {
+    background: var(--bg-card-alt);
+  }
+
+  .ori-row:hover {
+    background: var(--bg-card-hover);
+  }
+
+  .ori-agency {
+    font-size: 0.95rem;
+    color: var(--text-main);
+  }
+
+  .ori-chip {
+    font-family: var(--font-mono);
+    font-size: 0.88rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    width: 100%;
+    text-align: left;
+    padding: 8px 10px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition:
+      background 0.25s,
+      color 0.25s,
+      border-color 0.25s;
+  }
+
+  /* Short form: deliberately quiet, because it is the one people should not
+     reach for by default. */
+  .ori-chip.chip-7 {
+    background: transparent;
+    border: 1px dashed var(--hairline);
+    color: var(--text-muted);
+  }
+
+  .ori-chip.chip-7:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* Nine-character form: the one to hand over. */
+  .ori-chip.chip-9 {
+    background: var(--nav-bg);
+    border: 1px solid #4a3e28;
+    color: var(--accent);
+  }
+
+  .ori-chip.chip-9:hover {
+    background: var(--primary);
+    border-color: var(--primary-edge);
+    color: var(--text-bright);
+  }
+
+  .ori-chip.copied {
+    background: rgba(62, 107, 58, 0.35) !important;
+    border-color: var(--status-ok-border) !important;
+    color: var(--status-ok-text) !important;
+  }
+
+  .chip-kind {
+    display: none;
+    font-family: var(--font-heading);
+    font-size: 0.6rem;
+    letter-spacing: 2px;
+    color: var(--text-muted);
+    margin-right: 8px;
+  }
+
+  .ori-empty {
+    text-align: center;
+    padding: 60px 20px;
+    border: 1px dashed var(--hairline);
+    border-radius: var(--radius);
+    color: var(--text-muted);
+  }
+
+  .ori-empty i {
+    font-size: 1.8rem;
+    color: var(--accent);
+    margin-bottom: 16px;
+    display: block;
+  }
+
+  @media (max-width: 760px) {
+    .ori-colhead {
+      display: none;
+    }
+
+    .ori-row {
+      grid-template-columns: 1fr;
+      gap: 8px;
+      padding: 14px 12px;
+    }
+
+    .ori-agency {
+      font-weight: 700;
+    }
+
+    .chip-kind {
+      display: inline;
+    }
+  }
+</style>
