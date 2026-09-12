@@ -13,11 +13,16 @@ const owner = settings['legal.copyright'] ?? settings['site.name'];
 ---
 
 <footer>
+  {
+    /* The original footer used a wide wordmark lockup, a separate image from
+      the square badge in the header. Until that file is extracted this shows
+      the badge, which is the same mark at the same height — see README. */
+  }
   <img
-    src="/img/logo-wordmark.webp"
+    src="/img/logo.webp"
     alt={settings['site.name']}
-    width="420"
-    height="74"
+    width="230"
+    height="230"
     loading="lazy"
     class="footer-logo"
   />
