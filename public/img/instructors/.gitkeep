@@ -1,0 +1,13 @@
+Instructor portraits.
+
+Git does not track empty directories, so this file exists to keep the folder
+present in the repository — which also means you can upload images straight
+into it from GitHub's web interface.
+
+Expected files are named by the instructor's id in src/lib/seed/about.ts:
+
+  che-gary.jpg    -> referenced as /img/instructors/che-gary.jpg
+
+Rendered by Dossier.astro in a 240x240 square, so square crops work best.
+Roughly 600x600 is ample: it covers a 2x retina display with room to spare,
+and anything larger is bytes the visitor downloads but never sees.
