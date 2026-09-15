@@ -1,0 +1,11 @@
+# Files in dist/ that must NOT be served as public static assets.
+#
+# wrangler.toml points `assets.directory` at the whole of dist/, which is also
+# where the Cloudflare adapter writes the compiled server bundle. Without this
+# file Wrangler refuses to deploy at all, and rightly so: uploading _worker.js
+# as an asset would publish the server-side code on the open internet.
+#
+# Lives in public/ so Astro copies it into dist/ on every build — dist/ is
+# generated and git-ignored, so the file cannot live there directly.
+_worker.js
+_routes.json
