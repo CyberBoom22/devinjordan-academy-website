@@ -9,3 +9,7 @@
 # generated and git-ignored, so the file cannot live there directly.
 _worker.js
 _routes.json
+
+# Placeholder files that keep otherwise-empty directories in git. They carry
+# notes for contributors and have no business being served to visitors.
+.gitkeep
