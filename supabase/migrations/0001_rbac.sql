@@ -28,12 +28,18 @@ revoke all on schema app from anon, authenticated;
 -- ---------------------------------------------------------------------------
 -- Shared: keep updated_at honest without trusting the client to send it.
 -- ---------------------------------------------------------------------------
+-- search_path is pinned empty and now() is schema-qualified, matching every
+-- other function here. Without it Postgres resolves now() through whatever
+-- schema sits earliest in the caller's search_path, which Supabase's linter
+-- flags as function_search_path_mutable.
 create or replace function app.touch_updated_at()
 returns trigger
 language plpgsql
+security invoker
+set search_path = ''
 as $$
 begin
-  new.updated_at = now();
+  new.updated_at = pg_catalog.now();
   return new;
 end;
 $$;

@@ -5,12 +5,33 @@ compatibility_flags = ["nodejs_compat"]
 main = "./dist/_worker.js/index.js"
 assets = { directory = "./dist", binding = "ASSETS" }
 
-# Secrets are NOT set here. Set them once per environment with:
-#   wrangler secret put SUPABASE_SERVICE_ROLE_KEY
-# Public (non-secret) values live in .env locally and in the Cloudflare
-# dashboard for deployed environments.
+# --- Environment ------------------------------------------------------------
+#
+# IMPORTANT: `wrangler deploy` makes the Worker's plain variables match this
+# [vars] block exactly. Anything typed into the Cloudflare dashboard that is
+# not repeated here is REMOVED on the next deploy. So every non-secret value
+# belongs in this file, under version control, not in the dashboard.
+#
+# Secrets are the exception and are stored separately by Cloudflare. They are
+# NOT touched by a deploy. Set each one once, per environment:
+#
+#   npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
+#
+# The service role key bypasses row level security, so it must only ever be a
+# secret — never a [vars] entry, and never committed.
+
 [vars]
 PUBLIC_SITE_URL = "https://devinjordansecuritytrainingacademy.com"
+
+# The anon key is designed to be public — every Supabase browser app ships it —
+# and is protected by row level security, not by secrecy. Safe to commit.
+#
+# This is the legacy JWT-format anon key rather than the newer
+# sb_publishable_... key, because @supabase/supabase-js is pinned at ^2.47 here
+# and that line predates the publishable key format. Switch to the publishable
+# key when the SDK is bumped; the project issues both.
+PUBLIC_SUPABASE_URL = "https://eocccmrmbfuqeyllgfsw.supabase.co"
+PUBLIC_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVvY2NjbXJtYmZ1cWV5bGxnZnN3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk0NzQxMzYsImV4cCI6MjEwNTA1MDEzNn0.Q4PUzV5Pr76ZAOgAyJNAdixCdkkBqrkbqsXffCME0uU"
 
 # Astro's session API is backed by Workers KV. This project does not use it —
 # auth state lives in Supabase cookies — so no namespace is required. If a

@@ -1,0 +1,61 @@
+# Build, check and deploy the site to Cloudflare Workers.
+#
+# On a pull request this runs the checks only. On a push to main it runs the
+# same checks and then deploys, so main is never deployed without passing the
+# gate a contributor runs locally with `npm run verify`.
+#
+# The build needs no environment variables: Supabase credentials are read at
+# runtime from the Worker's own bindings, never inlined at build time. The only
+# secret GitHub holds is a Cloudflare API token scoped to deploying this Worker.
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Queue deploys rather than cancelling them: a half-finished deploy that gets
+# killed is worse than waiting for the one in front. Pull request checks are
+# cheap to cancel, so those are grouped per-branch and superseded freely.
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  deploy:
+    name: Verify${{ github.ref == 'refs/heads/main' && ' and deploy' || '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # `npm ci` installs exactly what package-lock.json pins and fails if the
+      # lockfile and package.json disagree, which is what we want in CI.
+      - name: Install dependencies
+        run: npm ci
+
+      # format:check, lint, astro check and build. Leaves dist/ ready to ship,
+      # so the deploy step below does not rebuild.
+      - name: Verify
+        run: npm run verify
+
+      # Deploys only from main, and never from a pull request — a fork PR has
+      # no access to the token anyway, and this makes that explicit rather than
+      # relying on it failing.
+      - name: Deploy to Cloudflare Workers
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
