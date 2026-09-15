@@ -5,12 +5,34 @@ compatibility_flags = ["nodejs_compat"]
 main = "./dist/_worker.js/index.js"
 assets = { directory = "./dist", binding = "ASSETS" }
 
-# Secrets are NOT set here. Set them once per environment with:
-#   wrangler secret put SUPABASE_SERVICE_ROLE_KEY
-# Public (non-secret) values live in .env locally and in the Cloudflare
-# dashboard for deployed environments.
+# --- Environment ------------------------------------------------------------
+#
+# IMPORTANT: `wrangler deploy` makes the Worker's plain variables match this
+# [vars] block exactly. Anything typed into the Cloudflare dashboard that is
+# not repeated here is REMOVED on the next deploy. So every non-secret value
+# belongs in this file, under version control, not in the dashboard.
+#
+# Secrets are the exception and are stored separately by Cloudflare. They are
+# NOT touched by a deploy. Set each one once, per environment:
+#
+#   npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
+#
+# The service role key bypasses row level security, so it must only ever be a
+# secret — never a [vars] entry, and never committed.
+
 [vars]
 PUBLIC_SITE_URL = "https://devinjordansecuritytrainingacademy.com"
+
+# Uncomment and fill in once the Supabase project exists. The anon key is
+# designed to be public — it is protected by row level security, not by
+# secrecy — so it is safe to commit here alongside the URL.
+#
+# Until these are set the site runs on the content in src/lib/seed/ and the
+# admin area reports that no database is connected. That is the intended
+# fallback, not a failure.
+#
+# PUBLIC_SUPABASE_URL = "https://<project-ref>.supabase.co"
+# PUBLIC_SUPABASE_ANON_KEY = "<anon key from Supabase - Settings - API>"
 
 # Astro's session API is backed by Workers KV. This project does not use it —
 # auth state lives in Supabase cookies — so no namespace is required. If a
