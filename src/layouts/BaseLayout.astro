@@ -108,6 +108,16 @@ const canonical = new URL(Astro.url.pathname, Astro.site ?? Astro.url.origin).hr
       import '../scripts/reveal';
       import '../scripts/find';
       import '../scripts/legacy-hash';
+
+      // These two drive one page each, and would belong on those pages, except
+      // that a `<script>` in a page or in a component is registered in the
+      // build manifest and then never emitted as a chunk in this SSR setup —
+      // so the page requested a file that did not exist and the feature was
+      // silently dead. Imported from the one entry Astro does emit. Both guard
+      // on an element that only their own page renders, so the cost elsewhere
+      // is a lookup that returns null.
+      import '../scripts/ori';
+      import '../scripts/news';
     </script>
 
     <noscript>

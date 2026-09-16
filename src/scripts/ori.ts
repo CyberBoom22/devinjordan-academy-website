@@ -33,7 +33,12 @@ if (list) {
       for (const row of section.querySelectorAll<HTMLElement>('.ori-row')) {
         const matches = countyMatches && (!query || (row.dataset.match ?? '').includes(query));
         row.hidden = !matches;
-        if (matches) visible += 1;
+        if (matches) {
+          // Striped here rather than with :nth-of-type, which counts the rows
+          // a filter has hidden and stripes the survivors at random.
+          row.classList.toggle('alt', visible % 2 === 1);
+          visible += 1;
+        }
       }
 
       section.hidden = visible === 0;
@@ -62,10 +67,20 @@ if (list) {
   search?.addEventListener('input', filter);
   countySelect?.addEventListener('change', filter);
 
+  // Paint the initial stripes. Also re-syncs the counts if the browser restored
+  // a typed query on a back-navigation, which it does for text inputs.
+  filter();
+
   /* --- Copy a code ------------------------------------------------------- */
+  const copyStatus = document.getElementById('oriCopyStatus');
+
   const flashCopied = (button: HTMLElement): void => {
     button.classList.add('copied');
     window.setTimeout(() => button.classList.remove('copied'), 1200);
+
+    // The green flash says nothing to a screen reader, and this is a button
+    // whose entire purpose is an effect you cannot see.
+    if (copyStatus) copyStatus.textContent = `Copied ${button.dataset.code ?? ''}`;
   };
 
   const fallbackCopy = (text: string, done: () => void): void => {
