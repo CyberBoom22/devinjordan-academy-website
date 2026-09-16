@@ -1,0 +1,118 @@
+---
+/**
+ * The way back to the admin area from any public page.
+ *
+ * Managing a site means looking at the real page and then going to change it,
+ * over and over. Without this the two halves are separate destinations and the
+ * loop runs through the browser's address bar.
+ *
+ * Rendered only for a signed-in account that may actually reach the admin
+ * area — a suspended account, or one nobody has given a role to yet, sees the
+ * site exactly as the public does. It is not a security boundary: the
+ * middleware refuses the admin routes regardless. It is about not showing
+ * somebody a door that will not open.
+ *
+ * Bottom-right rather than a strip across the top, because the site header is
+ * fixed and shrinks on scroll, with the logo positioned against it. A bar
+ * above that would mean re-deriving those offsets for one row of links.
+ */
+import { can } from '../../lib/auth/session';
+
+const { session } = Astro.locals;
+const user = session.user;
+const show = user !== null && user.status === 'active' && can(session, 'admin.access');
+
+const label = user?.fullName?.trim() || user?.email || '';
+---
+
+{
+  show && (
+    <div class="admin-bar" data-admin-bar>
+      <span class="admin-bar-who">
+        <span class="admin-bar-dot" aria-hidden="true" />
+        <span class="admin-bar-name">{label}</span>
+      </span>
+
+      <a href="/admin" class="admin-bar-link">
+        Admin
+      </a>
+
+      <form method="POST" action="/admin/logout">
+        <button type="submit" class="admin-bar-link admin-bar-out">
+          Sign out
+        </button>
+      </form>
+    </div>
+  )
+}
+
+<style>
+  .admin-bar {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 900;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 9px 14px;
+    background: var(--nav-bg, #16161a);
+    border: 1px solid var(--hairline, #2a2a2f);
+    border-radius: 999px;
+    box-shadow: 0 6px 24px -8px rgba(0, 0, 0, 0.7);
+    font-family: var(--font-heading);
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+
+  .admin-bar-who {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-muted);
+  }
+
+  .admin-bar-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--status-ok-text, #6bbf59);
+  }
+
+  /* The name is the least useful thing here on a narrow screen, so it is the
+     first thing to go. */
+  @media (max-width: 560px) {
+    .admin-bar-name {
+      display: none;
+    }
+  }
+
+  .admin-bar-link {
+    color: var(--accent);
+    text-decoration: none;
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    cursor: pointer;
+  }
+
+  .admin-bar-link:hover,
+  .admin-bar-link:focus-visible {
+    color: var(--text-bright);
+  }
+
+  .admin-bar-out {
+    color: var(--text-faint, #7a7a80);
+  }
+
+  @media print {
+    .admin-bar {
+      display: none;
+    }
+  }
+</style>

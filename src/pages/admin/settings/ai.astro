@@ -1,0 +1,168 @@
+---
+/**
+ * Which model writes the plain-English summaries, and the key to reach it.
+ *
+ * Dev only — enforced by public.set_ai_provider() and by the RLS policy on
+ * ai_settings, not by this page. The redirect below is courtesy.
+ *
+ * The key is never rendered. The form reads from ai_settings_safe, which
+ * exposes everything about the configuration except the secret, down to its
+ * last four characters — enough to recognise which key is in place, useless to
+ * anybody who shoulder-reads it. Saving with the field blank leaves the stored
+ * key alone, so the provider or model can be changed without re-typing a
+ * secret the page cannot show.
+ */
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+
+const { supabase, session } = Astro.locals;
+
+// Level 1 is Dev. Matches app.user_level() <= 1 in the policy.
+const isDev = (session.user?.level ?? 999) <= 1;
+if (!isDev) {
+  return Astro.redirect('/admin?error=forbidden', 303);
+}
+
+const PROVIDERS = [
+  { key: 'anthropic', label: 'Anthropic', hint: 'e.g. claude-sonnet-5' },
+  { key: 'openai', label: 'OpenAI', hint: 'e.g. gpt-4o' },
+  { key: 'google', label: 'Google', hint: 'e.g. gemini-2.0-flash' },
+];
+
+let notice: { kind: 'success' | 'error'; message: string } | null = null;
+
+if (Astro.request.method === 'POST' && supabase) {
+  const form = await Astro.request.formData();
+  const { error } = await supabase.rpc('set_ai_provider', {
+    p_provider: String(form.get('provider') ?? 'anthropic'),
+    p_model: String(form.get('model') ?? '').trim(),
+    // Empty means "keep what is stored"; the function treats null that way.
+    p_api_key: String(form.get('apiKey') ?? '').trim() || null,
+    p_enabled: form.get('enabled') === 'on',
+  });
+
+  notice = error
+    ? { kind: 'error', message: error.message }
+    : { kind: 'success', message: 'Saved.' };
+}
+
+type Safe = {
+  provider: string;
+  model: string | null;
+  enabled: boolean;
+  has_key: boolean;
+  key_last4: string | null;
+  updated_at: string;
+};
+
+let current: Safe | null = null;
+if (supabase) {
+  const { data } = await supabase.from('ai_settings_safe').select('*').maybeSingle();
+  current = (data ?? null) as unknown as Safe | null;
+}
+---
+
+<AdminLayout title="AI provider">
+  <div class="admin-head">
+    <h1>AI provider</h1>
+    <p>
+      The model that turns statutory text into plain English for the legislation scanner. Nothing
+      else in the site uses it.
+    </p>
+  </div>
+
+  {notice && <div class:list={['notice', notice.kind]}>{notice.message}</div>}
+
+  <div class="admin-card">
+    <form method="POST">
+      <div class="field" style="max-width:280px">
+        <label for="provider">Provider</label>
+        <select id="provider" name="provider">
+          {
+            PROVIDERS.map((p) => (
+              <option value={p.key} selected={current?.provider === p.key}>
+                {p.label}
+              </option>
+            ))
+          }
+        </select>
+      </div>
+
+      <div class="field" style="max-width:380px">
+        <label for="model">Model</label>
+        <input
+          type="text"
+          id="model"
+          name="model"
+          value={current?.model ?? ''}
+          placeholder="claude-sonnet-5"
+        />
+        <p class="hint">
+          Exact model identifier as the provider spells it. {
+            PROVIDERS.find((p) => p.key === current?.provider)?.hint
+          }
+        </p>
+      </div>
+
+      <div class="field" style="max-width:520px">
+        <label for="apiKey">API key</label>
+        <input
+          type="password"
+          id="apiKey"
+          name="apiKey"
+          autocomplete="off"
+          placeholder={current?.has_key ? `Stored — ends ${current.key_last4}` : 'Not set'}
+        />
+        <p class="hint">
+          {
+            current?.has_key
+              ? 'Leave blank to keep the stored key. Typing a new one replaces it.'
+              : 'Paste the key. It is stored write-only — no screen can show it again.'
+          }
+        </p>
+      </div>
+
+      <div class="field">
+        <label class="checkline">
+          <input type="checkbox" name="enabled" checked={current?.enabled} />
+          <span>Use this provider for summaries</span>
+        </label>
+        <p class="hint">
+          With this off, the scanner still collects and files legislation — entries simply carry
+          their verbatim excerpt and citation without a plain-English summary.
+        </p>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn-admin">Save</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="admin-card">
+    <h2>Where this key lives</h2>
+    <p>
+      In the database, because you asked to set it from here and a Cloudflare Worker secret cannot
+      be written from a browser. The trade is that anybody with database access can read it, so it
+      is kept off every read path the application uses and the policy admits only Dev.
+    </p>
+    <p>
+      If you would rather it were a Worker secret — unreadable from SQL, unreadable from here — that
+      is <code>npx wrangler secret put AI_API_KEY</code> and this screen becomes display-only. Say the
+      word and I will switch it over.
+    </p>
+  </div>
+</AdminLayout>
+
+<style>
+  .checkline {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+  }
+
+  .checkline input {
+    width: 18px;
+    height: 18px;
+  }
+</style>

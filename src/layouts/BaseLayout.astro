@@ -8,6 +8,7 @@
 import '../styles/base.css';
 import Preloader from '../components/layout/Preloader.astro';
 import Nav from '../components/layout/Nav.astro';
+import AdminBar from '../components/layout/AdminBar.astro';
 import FindBar from '../components/layout/FindBar.astro';
 import Footer from '../components/layout/Footer.astro';
 import { getSettings } from '../lib/content/repository';
@@ -92,6 +93,8 @@ const canonical = new URL(Astro.url.pathname, Astro.site ?? Astro.url.origin).hr
     <a class="skip-link" href="#main">Skip to content</a>
 
     <Preloader siteName={siteName} />
+    <AdminBar />
+
     <Nav />
     <FindBar />
 
