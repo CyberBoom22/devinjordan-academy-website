@@ -1,0 +1,143 @@
+---
+/**
+ * The second factor, on every sign-in after the first.
+ *
+ * A password gets the session to aal1; this page is what raises it to aal2,
+ * which is the level src/middleware.ts requires for everything in the admin
+ * area. Until it passes, the account is signed in and can do nothing.
+ */
+import '../../styles/base.css';
+import '../../styles/admin.css';
+import { csrfValid, issueCsrfToken, clearCsrfToken } from '../../lib/csrf';
+
+const { supabase, session } = Astro.locals;
+
+if (!supabase || !session.user) {
+  return Astro.redirect('/admin/login', 303);
+}
+
+/** Only ever back into the admin area — an open redirect here is worth as much to an attacker as one on the login form. */
+function safeNext(raw: string | null): string {
+  if (!raw || !raw.startsWith('/') || raw.startsWith('//')) return '/admin';
+  return raw.startsWith('/admin') ? raw : '/admin';
+}
+
+const next = safeNext(Astro.url.searchParams.get('next'));
+
+let error: string | null = null;
+
+// Which factor to challenge. Chosen server-side rather than posted by the
+// browser, so the form cannot nominate someone else's.
+const { data: factors } = await supabase.auth.mfa.listFactors();
+const factor = (factors?.totp ?? []).find((f) => f.status === 'verified') ?? null;
+
+// Nothing enrolled: this page has nothing to ask for. Enrolment is the step
+// they actually owe, and the guard would send them there anyway.
+if (!factor) {
+  return Astro.redirect('/admin/setup-2fa', 303);
+}
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const code = String(form.get('code') ?? '')
+    .replace(/\s+/g, '')
+    .trim();
+
+  if (!csrfValid(Astro.cookies, form.get('csrf'))) {
+    error = 'That form has expired. Please try again.';
+  } else if (!/^\d{6}$/.test(code)) {
+    error = 'Enter the six digits shown in your authenticator app.';
+  } else {
+    const { error: verifyError } = await supabase.auth.mfa.challengeAndVerify({
+      factorId: factor.id,
+      code,
+    });
+
+    if (verifyError) {
+      // Deliberately the same wording whatever went wrong. Distinguishing a
+      // wrong code from an expired challenge tells an attacker which half of
+      // the problem they have solved.
+      error = 'That code was not accepted. Codes change every 30 seconds — try the current one.';
+    } else {
+      clearCsrfToken(Astro.cookies);
+      return Astro.redirect(next, 303);
+    }
+  }
+}
+
+const csrfToken = issueCsrfToken(Astro.cookies, Astro.url);
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Two-factor | Academy admin</title>
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/assets/css/fonts.css" />
+  </head>
+
+  <body>
+    <div class="login-shell">
+      <div class="login-card">
+        <h1>Two-factor</h1>
+        <p class="sub">Open your authenticator app and enter the code for {session.user.email}.</p>
+
+        {error && <div class="notice error">{error}</div>}
+
+        <form method="POST">
+          <input type="hidden" name="csrf" value={csrfToken} />
+
+          <div class="field">
+            <label for="code">Six-digit code</label>
+            <input
+              type="text"
+              id="code"
+              name="code"
+              inputmode="numeric"
+              autocomplete="one-time-code"
+              pattern="[0-9]{6}"
+              maxlength="6"
+              placeholder="000000"
+              required
+              autofocus
+            />
+          </div>
+
+          <button type="submit" class="btn-admin">Continue</button>
+        </form>
+
+        <p class="login-foot mfa-lost">
+          Lost your authenticator? Another administrator can clear it for you, and you will be asked
+          to set one up again next time you sign in.
+        </p>
+
+        <form method="POST" action="/admin/logout">
+          <button type="submit" class="linklike">Sign out</button>
+        </form>
+      </div>
+    </div>
+
+    <style>
+      .mfa-lost {
+        color: var(--text-faint);
+        line-height: 1.6;
+      }
+
+      .linklike {
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        font-size: 0.82rem;
+        text-decoration: underline;
+        cursor: pointer;
+      }
+
+      .linklike:hover {
+        color: var(--accent);
+      }
+    </style>
+  </body>
+</html>

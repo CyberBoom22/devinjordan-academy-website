@@ -64,8 +64,27 @@ if (list) {
     }
   };
 
+  /**
+   * Bring the surviving list into view after a county is picked.
+   *
+   * Filtering leaves the chosen county as the only section, so it is already
+   * at the top of the list — but the viewport does not move, and from halfway
+   * down 640 rows the change is invisible. Only on the dropdown: doing it per
+   * keystroke while someone types a search would yank the page around under
+   * them.
+   */
+  const revealResults = (): void => {
+    const target = sections.find((section) => !section.hidden) ?? list;
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    target.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
+  };
+
   search?.addEventListener('input', filter);
-  countySelect?.addEventListener('change', filter);
+
+  countySelect?.addEventListener('change', () => {
+    filter();
+    revealResults();
+  });
 
   // Paint the initial stripes. Also re-syncs the counts if the browser restored
   // a typed query on a back-navigation, which it does for text inputs.
