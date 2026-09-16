@@ -1,7 +1,12 @@
 # Security contact for devinjordansecuritytrainingacademy.com
+# and devinjordansecurity.com, which serve the same site.
 # Format: RFC 9116 (https://www.rfc-editor.org/rfc/rfc9116)
 
 Contact: tel:+18483980976
 Expires: 2027-09-11T00:00:00.000Z
 Preferred-Languages: en
+# RFC 9116 asks every location the file is served from to be listed. A
+# validator fetching this file from one domain rejects it if that domain
+# is absent, so both are here.
 Canonical: https://devinjordansecuritytrainingacademy.com/.well-known/security.txt
+Canonical: https://devinjordansecurity.com/.well-known/security.txt
