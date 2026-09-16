@@ -16,6 +16,8 @@
  */
 import AdminLayout from '../../../layouts/AdminLayout.astro';
 import { can } from '../../../lib/auth/session';
+import { runScan } from '../../../lib/scan/run';
+import { NOT_YET_IMPLEMENTED } from '../../../lib/scan/sources';
 
 const { supabase, session } = Astro.locals;
 
@@ -25,6 +27,7 @@ if (!can(session, 'news.read')) {
 
 const isDev = (session.user?.level ?? 999) <= 1;
 const mayPublish = can(session, 'news.publish');
+const mayWrite = can(session, 'news.write');
 
 let notice: { kind: 'success' | 'error'; message: string } | null = null;
 
@@ -51,6 +54,28 @@ if (Astro.request.method === 'POST' && supabase) {
     notice = error
       ? { kind: 'error', message: error.message }
       : { kind: 'success', message: 'Review policy saved.' };
+  }
+
+  if (action === 'run' && can(session, 'news.write')) {
+    // Synchronous, and capped at 25 documents a run for that reason: a Worker
+    // request has a CPU budget and a corpus does not care about it. Pressing
+    // the button again continues where this one stopped, because an unchanged
+    // hash costs nothing to skip.
+    const result = await runScan(
+      supabase,
+      String(form.get('sourceKey') ?? ''),
+      session.user?.id ?? null,
+    );
+
+    notice = result.error
+      ? { kind: 'error', message: result.error }
+      : {
+          kind: 'success',
+          message:
+            `Saw ${result.documentsSeen}, ${result.documentsChanged} changed since last time. ` +
+            `${result.entriesCreated} new, ${result.entriesUpdated} updated, ` +
+            `${result.summariesGenerated} summarised.`,
+        };
   }
 
   if (action === 'publish' && mayPublish) {
@@ -249,23 +274,41 @@ if (supabase) {
     <h2>Sources</h2>
     <table class="scan-table">
       <thead>
-        <tr><th>Source</th><th>Key needed</th><th>Last run</th></tr>
+        <tr><th>Source</th><th>Key needed</th><th>Last run</th><th></th></tr>
       </thead>
       <tbody>
         {
           sources.map((s) => (
             <tr>
-              <td>{s.label}</td>
+              <td>
+                {s.label}
+                {NOT_YET_IMPLEMENTED.includes(s.key) && (
+                  <span class="src-todo">no adapter yet</span>
+                )}
+              </td>
               <td>{s.requires_key ? 'Yes' : 'No'}</td>
               <td>{s.last_run_at ? new Date(s.last_run_at).toLocaleString() : 'Never'}</td>
+              <td>
+                {mayWrite && !NOT_YET_IMPLEMENTED.includes(s.key) && (
+                  <form method="POST">
+                    <input type="hidden" name="action" value="run" />
+                    <input type="hidden" name="sourceKey" value={s.key} />
+                    <button type="submit" class="btn-admin secondary small">
+                      Run now
+                    </button>
+                  </form>
+                )}
+              </td>
             </tr>
           ))
         }
       </tbody>
     </table>
     <p class="hint">
-      eCFR and the Federal Register need no key. Congress.gov, OpenStates and CourtListener each
-      need a free one before they will return anything.
+      eCFR and the Federal Register need no key and can be run right now. OpenStates, Congress.gov
+      and CourtListener each need a free one; source keys are not stored yet, so those report the
+      gap rather than quietly finding nothing. A run takes at most 25 documents — press again to
+      continue, since anything unchanged costs nothing to skip.
     </p>
   </div>
 
@@ -381,6 +424,15 @@ if (supabase) {
   .scan-table td {
     padding: 9px 10px;
     border-bottom: 1px solid var(--hairline);
+  }
+
+  .src-todo {
+    margin-left: 10px;
+    font-family: var(--font-heading);
+    font-size: 0.58rem;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text-faint);
   }
 
   .run-failed {
