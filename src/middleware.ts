@@ -13,7 +13,21 @@ import { loadSession, EMPTY_SESSION } from './lib/auth/session';
 import { applySecurityHeaders } from './lib/security';
 
 /** Admin routes that a signed-out visitor is allowed to reach. */
-const PUBLIC_ADMIN_PATHS = ['/admin/login', '/admin/forgot-password', '/admin/reset-password'];
+const PUBLIC_ADMIN_PATHS = [
+  '/admin/login',
+  '/admin/register',
+  '/admin/forgot-password',
+  '/admin/reset-password',
+];
+
+/**
+ * Reachable while signed in but before the second factor has been given.
+ *
+ * Two-factor is required, not offered, so an account that has authenticated
+ * with a password and nothing else can reach exactly these: the two pages that
+ * raise it to aal2, and the door out. Everything else in the admin area waits.
+ */
+const STEP_UP_PATHS = ['/admin/setup-2fa', '/admin/verify-2fa', '/admin/logout'];
 
 export const onRequest = defineMiddleware(async (context, next) => {
   const runtimeEnv = context.locals.runtime?.env as Record<string, string | undefined> | undefined;
@@ -31,6 +45,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
   const isAdminRoute = path === '/admin' || path.startsWith('/admin/');
   const isPublicAdminRoute = PUBLIC_ADMIN_PATHS.some((p) => path === p || path.startsWith(`${p}/`));
 
+  const isStepUpRoute = STEP_UP_PATHS.some((p) => path === p);
+
   if (isAdminRoute && !isPublicAdminRoute) {
     const { user, permissions } = context.locals.session;
 
@@ -46,6 +62,30 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
     if (!permissions.has('admin.access')) {
       return context.redirect('/admin/login?error=no-access', 302);
+    }
+
+    // Who they are and what they may do are settled. What is left is how
+    // strongly they proved it.
+    if (!isStepUpRoute && supabase) {
+      const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+
+      if (!aal) {
+        // Could not tell. Refusing is the wrong failure for a required check
+        // with no way back, and letting them through defeats the point of
+        // requiring it — so send them to the page that works the answer out
+        // for itself and routes accordingly.
+        return context.redirect('/admin/verify-2fa', 302);
+      }
+
+      // nextLevel is aal2 exactly when a verified factor exists.
+      if (aal.nextLevel !== 'aal2') {
+        return context.redirect('/admin/setup-2fa', 302);
+      }
+
+      if (aal.currentLevel !== 'aal2') {
+        const redirectTo = encodeURIComponent(path + context.url.search);
+        return context.redirect(`/admin/verify-2fa?next=${redirectTo}`, 302);
+      }
     }
   }
 

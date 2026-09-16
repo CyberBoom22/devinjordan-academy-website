@@ -33,7 +33,12 @@ if (list) {
       for (const row of section.querySelectorAll<HTMLElement>('.ori-row')) {
         const matches = countyMatches && (!query || (row.dataset.match ?? '').includes(query));
         row.hidden = !matches;
-        if (matches) visible += 1;
+        if (matches) {
+          // Striped here rather than with :nth-of-type, which counts the rows
+          // a filter has hidden and stripes the survivors at random.
+          row.classList.toggle('alt', visible % 2 === 1);
+          visible += 1;
+        }
       }
 
       section.hidden = visible === 0;
@@ -59,13 +64,42 @@ if (list) {
     }
   };
 
+  /**
+   * Bring the surviving list into view after a county is picked.
+   *
+   * Filtering leaves the chosen county as the only section, so it is already
+   * at the top of the list — but the viewport does not move, and from halfway
+   * down 640 rows the change is invisible. Only on the dropdown: doing it per
+   * keystroke while someone types a search would yank the page around under
+   * them.
+   */
+  const revealResults = (): void => {
+    const target = sections.find((section) => !section.hidden) ?? list;
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    target.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
+  };
+
   search?.addEventListener('input', filter);
-  countySelect?.addEventListener('change', filter);
+
+  countySelect?.addEventListener('change', () => {
+    filter();
+    revealResults();
+  });
+
+  // Paint the initial stripes. Also re-syncs the counts if the browser restored
+  // a typed query on a back-navigation, which it does for text inputs.
+  filter();
 
   /* --- Copy a code ------------------------------------------------------- */
+  const copyStatus = document.getElementById('oriCopyStatus');
+
   const flashCopied = (button: HTMLElement): void => {
     button.classList.add('copied');
     window.setTimeout(() => button.classList.remove('copied'), 1200);
+
+    // The green flash says nothing to a screen reader, and this is a button
+    // whose entire purpose is an effect you cannot see.
+    if (copyStatus) copyStatus.textContent = `Copied ${button.dataset.code ?? ''}`;
   };
 
   const fallbackCopy = (text: string, done: () => void): void => {

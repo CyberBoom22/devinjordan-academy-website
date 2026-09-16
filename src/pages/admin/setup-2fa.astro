@@ -1,0 +1,235 @@
+---
+/**
+ * Enrol an authenticator app. Every account passes through here exactly once,
+ * because two-factor is required rather than offered — the guard in
+ * src/middleware.ts sends anyone without a verified factor straight to this
+ * page and will not let them past it.
+ *
+ * The QR code and the secret are shown together on purpose. The QR is faster,
+ * but it is an image, and an image fails quietly: a narrow screen, a blocked
+ * data: URI, a camera that will not focus. The secret is the version that
+ * always works, so it is not hidden behind a "trouble scanning?" link.
+ *
+ * Both are shown once and never again. Supabase returns the secret only at
+ * enrolment, so a reload does not re-display it — it discards the unverified
+ * factor and issues a new one.
+ */
+import '../../styles/base.css';
+import '../../styles/admin.css';
+import { csrfValid, issueCsrfToken, clearCsrfToken } from '../../lib/csrf';
+
+const { supabase, session } = Astro.locals;
+
+if (!supabase || !session.user) {
+  return Astro.redirect('/admin/login', 303);
+}
+
+let error: string | null = null;
+let qrSrc: string | null = null;
+let secret: string | null = null;
+let factorId = '';
+
+/* ------------------------------------------------------------- verifying */
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  factorId = String(form.get('factorId') ?? '');
+  const code = String(form.get('code') ?? '')
+    .replace(/\s+/g, '')
+    .trim();
+
+  if (!csrfValid(Astro.cookies, form.get('csrf'))) {
+    error = 'That form has expired. Please try again.';
+  } else if (!factorId) {
+    error = 'That enrolment has expired. Start again below.';
+  } else if (!/^\d{6}$/.test(code)) {
+    error = 'Enter the six digits shown in your authenticator app.';
+  } else {
+    const { error: verifyError } = await supabase.auth.mfa.challengeAndVerify({
+      factorId,
+      code,
+    });
+
+    if (verifyError) {
+      // Almost always a stale code — the six digits roll every 30 seconds, and
+      // a phone clock that has drifted is the other common cause.
+      error =
+        'That code was not accepted. Codes change every 30 seconds, so try the current one. If it keeps failing, your phone clock may be out of step.';
+    } else {
+      // Verifying raises the session to aal2, which is what the guard wants.
+      clearCsrfToken(Astro.cookies);
+      return Astro.redirect('/admin', 303);
+    }
+  }
+}
+
+/* ------------------------------------------------------------- enrolling */
+// Only on a fresh view. After a wrong code the factor from the previous
+// request is still valid and already scanned — re-enrolling there would throw
+// away a QR the person may have just pointed their phone at.
+if (Astro.request.method === 'GET') {
+  // An abandoned attempt leaves an unverified factor behind, and Supabase
+  // refuses a second one under the same name. Clear them out first.
+  const { data: existing } = await supabase.auth.mfa.listFactors();
+  for (const factor of existing?.all ?? []) {
+    if (factor.factor_type === 'totp' && factor.status !== 'verified') {
+      await supabase.auth.mfa.unenroll({ factorId: factor.id });
+    }
+  }
+
+  const { data: enrolled, error: enrollError } = await supabase.auth.mfa.enroll({
+    factorType: 'totp',
+    friendlyName: 'Authenticator',
+  });
+
+  if (enrollError || !enrolled) {
+    error = enrollError?.message ?? 'Could not start two-factor setup. Try again in a moment.';
+  } else if ('totp' in enrolled) {
+    factorId = enrolled.id;
+    secret = enrolled.totp.secret;
+    // The API hands back raw SVG, not a URL. Encoded rather than interpolated
+    // because an unescaped '#' inside the markup truncates the data URI.
+    qrSrc = `data:image/svg+xml;utf-8,${encodeURIComponent(enrolled.totp.qr_code)}`;
+  }
+}
+
+const csrfToken = issueCsrfToken(Astro.cookies, Astro.url);
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Set up two-factor | Academy admin</title>
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/assets/css/fonts.css" />
+  </head>
+
+  <body>
+    <div class="login-shell">
+      <div class="login-card">
+        <h1>Set up two-factor</h1>
+        <p class="sub">
+          The admin area requires an authenticator app. This takes about a minute and you only do it
+          once.
+        </p>
+
+        {error && <div class="notice error">{error}</div>}
+
+        {
+          qrSrc && (
+            <>
+              <ol class="mfa-steps">
+                <li>
+                  Install an authenticator app if you do not have one — Google Authenticator, Authy
+                  and 1Password all work.
+                </li>
+                <li>Scan this code with it, or type the key in by hand.</li>
+                <li>Enter the six digits it shows you.</li>
+              </ol>
+
+              <div class="mfa-qr">
+                <img
+                  src={qrSrc}
+                  alt="QR code for enrolling your authenticator app"
+                  width="200"
+                  height="200"
+                />
+              </div>
+
+              <div class="field">
+                <label for="secret">Or type this key in</label>
+                <input id="secret" class="mfa-secret" type="text" value={secret} readonly />
+                <p class="hint">
+                  Same thing the QR contains. Neither is shown again after you leave this page.
+                </p>
+              </div>
+            </>
+          )
+        }
+
+        <form method="POST">
+          <input type="hidden" name="csrf" value={csrfToken} />
+          <input type="hidden" name="factorId" value={factorId} />
+
+          <div class="field">
+            <label for="code">Six-digit code</label>
+            <input
+              type="text"
+              id="code"
+              name="code"
+              inputmode="numeric"
+              autocomplete="one-time-code"
+              pattern="[0-9]{6}"
+              maxlength="6"
+              placeholder="000000"
+              required
+              autofocus
+            />
+          </div>
+
+          <button type="submit" class="btn-admin">Turn on two-factor</button>
+        </form>
+
+        {
+          !qrSrc && (
+            <p class="login-foot">
+              <a href="/admin/setup-2fa">Start again with a new code</a>
+            </p>
+          )
+        }
+
+        <form method="POST" action="/admin/logout" class="mfa-signout">
+          <button type="submit" class="linklike">Sign out instead</button>
+        </form>
+      </div>
+    </div>
+
+    <style>
+      .mfa-steps {
+        text-align: left;
+        margin: 0 0 22px 0;
+        padding-left: 20px;
+        color: var(--text-muted);
+        font-size: 0.9rem;
+        line-height: 1.7;
+      }
+
+      .mfa-qr {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 20px;
+      }
+
+      /* The QR is dark-on-transparent; on a dark card that is invisible. */
+      .mfa-qr img {
+        background: #fff;
+        padding: 10px;
+        border-radius: 4px;
+      }
+
+      .mfa-secret {
+        font-family: var(--font-mono);
+        letter-spacing: 2px;
+      }
+
+      .mfa-signout {
+        margin-top: 18px;
+      }
+
+      .linklike {
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        font-size: 0.82rem;
+        text-decoration: underline;
+        cursor: pointer;
+      }
+
+      .linklike:hover {
+        color: var(--accent);
+      }
+    </style>
+  </body>
+</html>

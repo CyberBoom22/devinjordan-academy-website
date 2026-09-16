@@ -46,6 +46,7 @@ const totalAgencies = counties.reduce((sum, county) => sum + county.agencies.len
   <span class="ori-count" id="oriCount" role="status" aria-live="polite">
     {pluralAgencies(totalAgencies)} in {counties.length} counties
   </span>
+  <span class="ori-sr" id="oriCopyStatus" role="status" aria-live="polite"></span>
 </div>
 
 <div id="oriList" data-total-agencies={totalAgencies} data-total-counties={counties.length}>
@@ -162,6 +163,16 @@ const totalAgencies = counties.reduce((sum, county) => sum + county.agencies.len
     white-space: nowrap;
   }
 
+  /* Announces the copy to a screen reader; the green flash is sighted-only. */
+  .ori-sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
   .ori-county {
     margin-bottom: 38px;
   }
@@ -225,7 +236,17 @@ const totalAgencies = counties.reduce((sum, county) => sum + county.agencies.len
     background: var(--bg-card);
   }
 
-  .ori-row:nth-of-type(odd) {
+  /* `[hidden]` is only `display: none` in the user-agent stylesheet, and the
+     author `display: grid` above outranks it — so setting `row.hidden` moved
+     nothing until this rule existed. */
+  .ori-row[hidden] {
+    display: none;
+  }
+
+  /* Striping is assigned in JavaScript over the rows that are actually
+     visible. `:nth-of-type` counts hidden siblings too, so a filtered list
+     striped itself at random. */
+  .ori-row.alt {
     background: var(--bg-card-alt);
   }
 
