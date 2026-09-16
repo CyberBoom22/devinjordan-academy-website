@@ -13,7 +13,12 @@ import { loadSession, EMPTY_SESSION } from './lib/auth/session';
 import { applySecurityHeaders } from './lib/security';
 
 /** Admin routes that a signed-out visitor is allowed to reach. */
-const PUBLIC_ADMIN_PATHS = ['/admin/login', '/admin/forgot-password', '/admin/reset-password'];
+const PUBLIC_ADMIN_PATHS = [
+  '/admin/login',
+  '/admin/register',
+  '/admin/forgot-password',
+  '/admin/reset-password',
+];
 
 export const onRequest = defineMiddleware(async (context, next) => {
   const runtimeEnv = context.locals.runtime?.env as Record<string, string | undefined> | undefined;

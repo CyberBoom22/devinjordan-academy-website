@@ -8,6 +8,7 @@
  */
 import '../../styles/base.css';
 import '../../styles/admin.css';
+import { csrfValid, issueCsrfToken, clearCsrfToken } from '../../lib/csrf';
 
 const { supabase, session } = Astro.locals;
 
@@ -21,38 +22,6 @@ function safeNext(raw: string | null): string {
 }
 
 const next = safeNext(Astro.url.searchParams.get('next'));
-
-/**
- * Login CSRF guard — a double submit cookie.
- *
- * Every other admin form is already covered by the session cookie being
- * SameSite=Lax: a cross-site POST does not carry it, so such a request arrives
- * signed out and does nothing. Sign-in is the exception, because it needs no
- * existing session. Without this, a third-party page can POST the attacker's
- * own credentials here and silently land the visitor inside an account the
- * attacker controls — where everything the visitor then types is the
- * attacker's to read.
- *
- * The token is minted on GET, kept in a cookie and echoed in a hidden field.
- * Only a page on this origin can read that cookie back, so only a form this
- * site rendered can present a matching pair.
- */
-const CSRF_COOKIE = 'dj_login_csrf';
-const CSRF_SHAPE = /^[0-9a-f]{64}$/;
-
-function mintCsrfToken(): string {
-  const bytes = new Uint8Array(32);
-  crypto.getRandomValues(bytes);
-  return [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
-}
-
-/** Compared in constant time, so a near miss is not distinguishable by clock. */
-function tokensMatch(a: string, b: string): boolean {
-  if (a.length === 0 || a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i += 1) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}
 
 let error: string | null = null;
 let email = '';
@@ -75,7 +44,7 @@ if (Astro.request.method === 'POST') {
   email = String(form.get('email') ?? '').trim();
   const password = String(form.get('password') ?? '');
 
-  if (!tokensMatch(Astro.cookies.get(CSRF_COOKIE)?.value ?? '', String(form.get('csrf') ?? ''))) {
+  if (!csrfValid(Astro.cookies, form.get('csrf'))) {
     // Either a genuinely stale form or a cross-site submission. The two are
     // indistinguishable from here, so the wording suits both.
     error = 'That sign-in form has expired. Please try again.';
@@ -91,25 +60,13 @@ if (Astro.request.method === 'POST') {
       // whether an address is a real account here.
       error = 'That email address and password do not match an account.';
     } else {
-      Astro.cookies.delete(CSRF_COOKIE, { path: '/admin' });
+      clearCsrfToken(Astro.cookies);
       return Astro.redirect(next, 303);
     }
   }
 }
 
-// Reuse an existing token rather than rotating on every render: rotating would
-// invalidate the form in any other tab the visitor already has open, and the
-// value is unguessable either way.
-const existingCsrf = Astro.cookies.get(CSRF_COOKIE)?.value;
-const csrfToken = existingCsrf && CSRF_SHAPE.test(existingCsrf) ? existingCsrf : mintCsrfToken();
-
-Astro.cookies.set(CSRF_COOKIE, csrfToken, {
-  path: '/admin',
-  httpOnly: true,
-  sameSite: 'lax',
-  secure: Astro.url.protocol === 'https:',
-  maxAge: 60 * 60,
-});
+const csrfToken = issueCsrfToken(Astro.cookies, Astro.url);
 ---
 
 <!doctype html>
@@ -166,6 +123,9 @@ Astro.cookies.set(CSRF_COOKIE, csrfToken, {
           <button type="submit" class="btn-admin">Sign in</button>
         </form>
 
+        <p class="login-foot">
+          Have an invite code? <a href="/admin/register">Create your account</a>
+        </p>
         <p class="login-foot"><a href="/">← Back to the website</a></p>
       </div>
     </div>

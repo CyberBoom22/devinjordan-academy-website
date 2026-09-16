@@ -1,0 +1,240 @@
+---
+/**
+ * Create a staff account from an invite code.
+ *
+ * There is no open sign-up. A code decides three things at once: that the
+ * person was invited, which role they arrive holding, and — when the code is
+ * bound to an address — which mailbox they must own.
+ *
+ * The code is checked before anything is created, so a typo produces a
+ * sentence rather than an account with no role, which looks to an
+ * administrator exactly like a broken invite. The check does not consume the
+ * code; redemption happens inside app.handle_new_user(), in the same
+ * transaction as the account, so a failure between the two cannot strand
+ * somebody half-registered.
+ *
+ * A plain form POST, like sign-in, so this works before any JavaScript loads.
+ */
+import '../../styles/base.css';
+import '../../styles/admin.css';
+import { csrfValid, issueCsrfToken, clearCsrfToken } from '../../lib/csrf';
+
+const { supabase, session } = Astro.locals;
+
+/** Long enough to be worth having; short enough that people use a manager. */
+const MIN_PASSWORD = 12;
+
+/** Why a code was refused, in words the person can act on. */
+const CODE_MESSAGES: Record<string, string> = {
+  invalid: 'That invite code was not recognised. Check it for typos — letters only, no O or I.',
+  expired: 'That invite code has expired. Ask whoever invited you for a new one.',
+  'already-used':
+    'That invite code has already been used. Codes work once; ask for a new one if you need to register again.',
+  'wrong-email':
+    'That invite code was issued for a different email address. Register with the address it was sent to.',
+};
+
+// Already signed in with access? Registering again is not what they want.
+if (Astro.request.method === 'GET' && session.user && session.permissions.has('admin.access')) {
+  return Astro.redirect('/admin', 302);
+}
+
+let error: string | null = null;
+let notice: string | null = null;
+
+// Re-rendered into the form after a failure so nothing has to be retyped.
+let code = Astro.url.searchParams.get('code') ?? '';
+let firstName = '';
+let lastName = '';
+let email = '';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+
+  code = String(form.get('code') ?? '').trim();
+  firstName = String(form.get('firstName') ?? '').trim();
+  lastName = String(form.get('lastName') ?? '').trim();
+  email = String(form.get('email') ?? '').trim();
+  const password = String(form.get('password') ?? '');
+  const confirm = String(form.get('confirm') ?? '');
+
+  if (!csrfValid(Astro.cookies, form.get('csrf'))) {
+    error = 'That form has expired. Please try again.';
+  } else if (!supabase) {
+    error = 'Registration is unavailable: this deployment has no Supabase connection configured.';
+  } else if (!code || !firstName || !lastName || !email || !password) {
+    error = 'Every field is required.';
+  } else if (password.length < MIN_PASSWORD) {
+    error = `Use at least ${MIN_PASSWORD} characters. A passphrase of a few unrelated words is easier to remember and harder to guess than a short one with symbols in it.`;
+  } else if (password !== confirm) {
+    error = 'The two passwords do not match.';
+  } else {
+    // Ask before creating anything. The answer is a reason, never a row: this
+    // reveals whether a code is usable and nothing else about it.
+    const { data: verdict, error: checkError } = await supabase.rpc('check_invite', {
+      p_code: code,
+      p_email: email,
+    });
+
+    if (checkError) {
+      error = 'Could not check that invite code just now. Try again in a moment.';
+    } else if (verdict !== 'ok') {
+      error = CODE_MESSAGES[String(verdict)] ?? 'That invite code cannot be used.';
+    } else {
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          // Read by app.handle_new_user(), which validates the code again
+          // against its hash before honouring it. Nothing here is trusted
+          // because the browser sent it.
+          data: {
+            full_name: `${firstName} ${lastName}`.trim(),
+            invite_code: code,
+          },
+        },
+      });
+
+      if (signUpError) {
+        error = signUpError.message;
+      } else if (data.session) {
+        // Confirmation is off: they are signed in, and the trigger has already
+        // given them their role.
+        clearCsrfToken(Astro.cookies);
+        return Astro.redirect('/admin', 303);
+      } else {
+        // Confirmation is on. The account, its role and its active status all
+        // exist already — only the mailbox check is outstanding.
+        notice = `Account created. Check ${email} for a confirmation link, then sign in.`;
+        code = firstName = lastName = email = '';
+      }
+    }
+  }
+}
+
+const csrfToken = issueCsrfToken(Astro.cookies, Astro.url);
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Create your account | Academy admin</title>
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/assets/css/fonts.css" />
+  </head>
+
+  <body>
+    <div class="login-shell">
+      <div class="login-card">
+        <img
+          src="/img/logo.webp"
+          alt="Devin Jordan Security Training Academy"
+          width="230"
+          height="230"
+        />
+        <h1>Create your account</h1>
+        <p class="sub">Staff accounts are by invitation. You will need the code you were sent.</p>
+
+        {error && <div class="notice error">{error}</div>}
+        {notice && <div class="notice success">{notice}</div>}
+
+        {
+          !notice && (
+            <form method="POST">
+              <input type="hidden" name="csrf" value={csrfToken} />
+
+              <div class="field">
+                <label for="code">Invite code</label>
+                <input
+                  type="text"
+                  id="code"
+                  name="code"
+                  value={code}
+                  placeholder="XXXXX-XXXXX-XXXXX-XXXXX"
+                  autocomplete="off"
+                  spellcheck={false}
+                  required
+                  autofocus
+                />
+              </div>
+
+              <div class="field">
+                <label for="firstName">First name</label>
+                <input
+                  type="text"
+                  id="firstName"
+                  name="firstName"
+                  value={firstName}
+                  autocomplete="given-name"
+                  required
+                />
+              </div>
+
+              <div class="field">
+                <label for="lastName">Last name</label>
+                <input
+                  type="text"
+                  id="lastName"
+                  name="lastName"
+                  value={lastName}
+                  autocomplete="family-name"
+                  required
+                />
+              </div>
+
+              <div class="field">
+                <label for="email">Email address</label>
+                <input
+                  type="email"
+                  id="email"
+                  name="email"
+                  value={email}
+                  autocomplete="username"
+                  required
+                />
+                <p class="hint">
+                  Must be the address the invite was sent to, if it was issued for one.
+                </p>
+              </div>
+
+              <div class="field">
+                <label for="password">Choose a password</label>
+                <input
+                  type="password"
+                  id="password"
+                  name="password"
+                  autocomplete="new-password"
+                  minlength={MIN_PASSWORD}
+                  required
+                />
+                <p class="hint">At least {MIN_PASSWORD} characters.</p>
+              </div>
+
+              <div class="field">
+                <label for="confirm">Confirm password</label>
+                <input
+                  type="password"
+                  id="confirm"
+                  name="confirm"
+                  autocomplete="new-password"
+                  minlength={MIN_PASSWORD}
+                  required
+                />
+              </div>
+
+              <button type="submit" class="btn-admin">
+                Create account
+              </button>
+            </form>
+          )
+        }
+
+        <p class="login-foot">Already have an account? <a href="/admin/login">Sign in</a></p>
+        <p class="login-foot"><a href="/">← Back to the website</a></p>
+      </div>
+    </div>
+  </body>
+</html>
