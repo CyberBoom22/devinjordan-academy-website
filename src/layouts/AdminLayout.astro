@@ -33,6 +33,12 @@ type NavItem = {
   icon: string;
   needs: Permission[];
   ready?: boolean;
+  /**
+   * Hidden from anyone but a Dev. Deliberately a level test rather than a
+   * permission: "Dev" is a rank, and a permission could be granted to somebody
+   * who is not one, which is the whole thing this is meant to prevent.
+   */
+  devOnly?: boolean;
 };
 type NavGroup = { group: string; items: NavItem[] };
 
@@ -57,6 +63,12 @@ const NAV: NavGroup[] = [
         label: 'Instructors',
         icon: 'fa-solid fa-user-shield',
         needs: ['instructor.read'],
+      },
+      {
+        href: '/admin/news/scan',
+        label: 'Legislation scanner',
+        icon: 'fa-solid fa-radar',
+        needs: ['news.read'],
       },
       {
         href: '/admin/news',
@@ -88,6 +100,13 @@ const NAV: NavGroup[] = [
         needs: ['enquiry.read'],
       },
       {
+        href: '/admin/settings/ai',
+        label: 'AI provider',
+        icon: 'fa-solid fa-microchip',
+        needs: ['settings.read'],
+        devOnly: true,
+      },
+      {
         href: '/admin/settings',
         label: 'Site settings',
         icon: 'fa-solid fa-sliders',
@@ -98,6 +117,12 @@ const NAV: NavGroup[] = [
   {
     group: 'Access',
     items: [
+      {
+        href: '/admin/invites',
+        label: 'Invites',
+        icon: 'fa-solid fa-envelope-open-text',
+        needs: ['user.invite'],
+      },
       {
         href: '/admin/users',
         label: 'Staff accounts',
@@ -122,9 +147,11 @@ const NAV: NavGroup[] = [
 
 const path = Astro.url.pathname.replace(/\/$/, '') || '/admin';
 
+const isDev = (session.user?.level ?? 999) <= 1;
+
 const visibleGroups = NAV.map((group) => ({
   ...group,
-  items: group.items.filter((item) => canAny(session, ...item.needs)),
+  items: group.items.filter((item) => canAny(session, ...item.needs) && (!item.devOnly || isDev)),
 })).filter((group) => group.items.length > 0);
 ---
 

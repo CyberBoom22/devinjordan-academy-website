@@ -1,0 +1,428 @@
+---
+/**
+ * Invites: issue one, rotate a code that has gone stale, revoke one that
+ * should not be used, and see what happened to every invite ever issued.
+ *
+ * A code is shown exactly once, on the response to the request that minted it.
+ * Only its hash is stored, so there is no screen anywhere that can show it
+ * again — which is the point, and also why the page says so plainly rather
+ * than letting someone navigate away and find out.
+ */
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { can, outranks } from '../../lib/auth/session';
+
+const { supabase, session } = Astro.locals;
+
+if (!can(session, 'user.invite')) {
+  return Astro.redirect('/admin?error=forbidden', 303);
+}
+
+type Row = {
+  id: string;
+  email: string;
+  full_name: string | null;
+  role_key: string;
+  role_name: string;
+  role_level: number;
+  note: string | null;
+  created_at: string;
+  rotated_at: string;
+  expires_at: string;
+  rotation_count: number;
+  rotation_days: number;
+  redeemed_at: string | null;
+  revoked_at: string | null;
+  issued_by_email: string | null;
+  redeemed_by_email: string | null;
+  status: 'active' | 'expired' | 'revoked' | 'redeemed';
+  days_left: number;
+};
+
+let notice: { kind: 'success' | 'error'; message: string } | null = null;
+/** The plaintext, for this render only. */
+let mintedCode: string | null = null;
+let mintedFor: string | null = null;
+
+if (Astro.request.method === 'POST' && supabase) {
+  const form = await Astro.request.formData();
+  const action = String(form.get('action') ?? '');
+
+  if (action === 'issue') {
+    const { data, error } = await supabase.rpc('issue_invite', {
+      p_email: String(form.get('email') ?? '').trim(),
+      p_first_name: String(form.get('firstName') ?? '').trim(),
+      p_last_name: String(form.get('lastName') ?? '').trim(),
+      p_role_key: String(form.get('role') ?? ''),
+      p_note: String(form.get('note') ?? '').trim() || null,
+      p_rotation_days: form.get('rotationDays') ? Number(form.get('rotationDays')) : null,
+    });
+
+    if (error) notice = { kind: 'error', message: error.message };
+    else {
+      mintedCode = String(data);
+      mintedFor = String(form.get('email') ?? '').trim();
+    }
+  }
+
+  if (action === 'rotate') {
+    const { data, error } = await supabase.rpc('rotate_invite', {
+      p_invite: String(form.get('inviteId') ?? ''),
+    });
+    if (error) notice = { kind: 'error', message: error.message };
+    else {
+      mintedCode = String(data);
+      mintedFor = String(form.get('email') ?? '');
+    }
+  }
+
+  if (action === 'revoke') {
+    const { error } = await supabase.rpc('revoke_invite', {
+      p_invite: String(form.get('inviteId') ?? ''),
+    });
+    notice = error
+      ? { kind: 'error', message: error.message }
+      : { kind: 'success', message: 'Invite revoked. Its code no longer works.' };
+  }
+
+  if (action === 'interval') {
+    const { error } = await supabase
+      .from('invite_settings')
+      .update({
+        rotation_days: Number(form.get('rotationDays') ?? 14),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', true);
+    notice = error
+      ? { kind: 'error', message: error.message }
+      : { kind: 'success', message: 'Default interval saved.' };
+  }
+}
+
+/* ------------------------------------------------------------------- reads */
+let rows: Row[] = [];
+let roles: { key: string; name: string; level: number }[] = [];
+let defaultDays = 14;
+let loadError: string | null = null;
+
+if (supabase) {
+  const [invites, roleList, settings] = await Promise.all([
+    supabase.from('invite_overview').select('*').order('created_at', { ascending: false }),
+    supabase.from('roles').select('key, name, level').order('level'),
+    supabase.from('invite_settings').select('rotation_days').eq('id', true).maybeSingle(),
+  ]);
+
+  loadError = invites.error?.message ?? null;
+  rows = (invites.data ?? []) as unknown as Row[];
+  // Only roles this session outranks: the database refuses the rest anyway,
+  // and an option that always errors is worse than no option.
+  roles = ((roleList.data ?? []) as { key: string; name: string; level: number }[]).filter((r) =>
+    outranks(session, r.level),
+  );
+  defaultDays = settings.data?.rotation_days ?? 14;
+}
+
+/** Grouped by the person, because that is the question people actually ask. */
+const byPerson = new Map<string, Row[]>();
+for (const row of rows) {
+  const list = byPerson.get(row.email) ?? [];
+  list.push(row);
+  byPerson.set(row.email, list);
+}
+
+const STATUS_LABEL: Record<Row['status'], string> = {
+  active: 'Active',
+  expired: 'Expired',
+  revoked: 'Revoked',
+  redeemed: 'Redeemed',
+};
+
+function when(value: string | null): string {
+  if (!value) return '—';
+  return new Date(value).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+---
+
+<AdminLayout title="Invites">
+  <div class="admin-head">
+    <h1>Invites</h1>
+    <p>Staff accounts are created from a code. One code, one person, one use.</p>
+  </div>
+
+  {loadError && <div class="notice error">{loadError}</div>}
+  {notice && <div class:list={['notice', notice.kind]}>{notice.message}</div>}
+
+  {
+    mintedCode && (
+      <div class="admin-card minted">
+        <h2>Copy this code now</h2>
+        <p>
+          It is for <strong>{mintedFor}</strong>. Only a hash of it is stored, so this is the one
+          and only time it can be displayed — leaving this page loses it, and the only way back is
+          to issue a new one.
+        </p>
+        <p class="minted-code">{mintedCode}</p>
+        <p class="hint">
+          Send it however you would send a password. They redeem it at <code>/admin/register</code>.
+        </p>
+      </div>
+    )
+  }
+
+  <div class="admin-card">
+    <h2>Invite someone</h2>
+    <form method="POST" class="invite-form">
+      <input type="hidden" name="action" value="issue" />
+
+      <div class="invite-grid">
+        <div class="field">
+          <label for="firstName">First name</label>
+          <input type="text" id="firstName" name="firstName" required />
+        </div>
+        <div class="field">
+          <label for="lastName">Last name</label>
+          <input type="text" id="lastName" name="lastName" required />
+        </div>
+        <div class="field">
+          <label for="email">Email address</label>
+          <input type="email" id="email" name="email" required />
+          <p class="hint">The code only works for this address.</p>
+        </div>
+        <div class="field">
+          <label for="role">Role</label>
+          <select id="role" name="role" required>
+            {roles.map((role) => <option value={role.key}>{role.name}</option>)}
+          </select>
+          <p class="hint">Only roles you outrank are listed.</p>
+        </div>
+        <div class="field">
+          <label for="rotationDays">Valid for (days)</label>
+          <input
+            type="number"
+            id="rotationDays"
+            name="rotationDays"
+            min="1"
+            max="365"
+            placeholder={String(defaultDays)}
+          />
+          <p class="hint">Blank uses the default of {defaultDays}.</p>
+        </div>
+        <div class="field">
+          <label for="note">Note (optional)</label>
+          <input
+            type="text"
+            id="note"
+            name="note"
+            placeholder="e.g. Replacing Dana on the front desk"
+          />
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn-admin" disabled={roles.length === 0}>
+          Issue invite
+        </button>
+      </div>
+
+      {
+        roles.length === 0 && (
+          <p class="hint">You do not outrank any role, so there is nobody you can invite.</p>
+        )
+      }
+    </form>
+  </div>
+
+  <div class="admin-card">
+    <h2>How long codes last</h2>
+    <p>
+      Applies to every invite that does not set its own. Codes expire on their own; issuing a
+      replacement is deliberate, because the new code has to be shown to somebody to be any use.
+    </p>
+    <form method="POST" class="interval-form">
+      <input type="hidden" name="action" value="interval" />
+      <div class="field" style="max-width:200px">
+        <label for="defaultDays">Days</label>
+        <input
+          type="number"
+          id="defaultDays"
+          name="rotationDays"
+          min="1"
+          max="365"
+          value={defaultDays}
+        />
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn-admin secondary">Save</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="admin-card">
+    <h2>Everyone invited</h2>
+
+    {byPerson.size === 0 && <p class="hint">Nobody has been invited yet.</p>}
+
+    {
+      [...byPerson.entries()].map(([email, list]) => (
+        <section class="invite-person">
+          <div class="invite-person-head">
+            <strong>{list[0]?.full_name || email}</strong>
+            {list[0]?.full_name && <span class="invite-email">{email}</span>}
+          </div>
+
+          {list.map((row) => (
+            <div class:list={['invite-row', `is-${row.status}`]}>
+              <div>
+                <span class="badge-role">{row.role_name}</span>
+                <span class:list={['invite-status', `status-${row.status}`]}>
+                  {STATUS_LABEL[row.status]}
+                </span>
+                {row.status === 'active' && (
+                  <span class="invite-meta">{row.days_left} day(s) left</span>
+                )}
+              </div>
+
+              <div class="invite-meta">
+                Issued {when(row.created_at)}
+                {row.issued_by_email && <> by {row.issued_by_email}</>}
+                {row.rotation_count > 0 && <> · re-issued {row.rotation_count}×</>}
+                {row.redeemed_at && <> · redeemed {when(row.redeemed_at)}</>}
+                {row.revoked_at && <> · revoked {when(row.revoked_at)}</>}
+                {row.note && <> · {row.note}</>}
+              </div>
+
+              {row.status !== 'redeemed' && (
+                <div class="invite-actions">
+                  <form method="POST">
+                    <input type="hidden" name="action" value="rotate" />
+                    <input type="hidden" name="inviteId" value={row.id} />
+                    <input type="hidden" name="email" value={row.email} />
+                    <button type="submit" class="btn-admin secondary small">
+                      New code
+                    </button>
+                  </form>
+
+                  {row.status === 'active' && (
+                    <form method="POST">
+                      <input type="hidden" name="action" value="revoke" />
+                      <input type="hidden" name="inviteId" value={row.id} />
+                      <button type="submit" class="btn-admin secondary small">
+                        Revoke
+                      </button>
+                    </form>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </section>
+      ))
+    }
+  </div>
+</AdminLayout>
+
+<style>
+  .minted {
+    border-color: var(--status-ok-border);
+  }
+
+  .minted-code {
+    font-family: var(--font-mono);
+    font-size: 1.25rem;
+    letter-spacing: 3px;
+    color: var(--status-ok-text);
+    background: var(--bg-card-alt);
+    border: 1px dashed var(--status-ok-border);
+    border-radius: 4px;
+    padding: 16px;
+    text-align: center;
+    margin: 14px 0 10px;
+    user-select: all;
+  }
+
+  .invite-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0 18px;
+  }
+
+  .interval-form {
+    display: flex;
+    align-items: flex-end;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .invite-person {
+    border-top: 1px solid var(--hairline);
+    padding-top: 14px;
+    margin-top: 14px;
+  }
+
+  .invite-person-head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+
+  .invite-email {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+  }
+
+  .invite-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 6px 16px;
+    padding: 10px 0;
+    align-items: center;
+  }
+
+  .invite-row.is-redeemed,
+  .invite-row.is-revoked,
+  .invite-row.is-expired {
+    opacity: 0.65;
+  }
+
+  .invite-meta {
+    grid-column: 1 / -1;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+  }
+
+  .invite-status {
+    font-family: var(--font-heading);
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-left: 10px;
+  }
+
+  .status-active {
+    color: var(--status-ok-text);
+  }
+
+  .status-expired,
+  .status-revoked {
+    color: var(--text-faint);
+  }
+
+  .status-redeemed {
+    color: var(--accent);
+  }
+
+  .invite-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .btn-admin.small {
+    padding: 6px 10px;
+    font-size: 0.62rem;
+  }
+</style>
