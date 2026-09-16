@@ -27,8 +27,45 @@ type RoleRow = { id: string; key: string; name: string; description: string | nu
 
 let notice: { kind: 'success' | 'error'; message: string } | null = null;
 
+/* --------------------------------------------------------------- authority */
+/**
+ * May this session administer the target account?
+ *
+ * `mayManage` further down answers the same question, but it is computed from
+ * data read *after* the handlers have already run, so it only ever decided
+ * what to render. This copy is the one that guards the writes.
+ *
+ * Without it the handlers sat behind `user.manage` alone — which is the
+ * permission to administer subordinates, not the answer to "this account, by
+ * me". Row level security refused most of what that allowed, because
+ * app.can_manage_user() excludes self and peers. It did not refuse the
+ * `status` write: that one targets `profiles`, and a signed-in user may always
+ * edit their own profile row, so a self-suspend reached the database intact.
+ */
+let mayWrite = false;
+if (supabase && id && id !== session.user?.id) {
+  const { data: heldNow } = await supabase
+    .from('user_roles')
+    .select('role:roles(level)')
+    .eq('user_id', id);
+
+  const levels = ((heldNow ?? []) as unknown as { role: { level: number } | null }[])
+    .map((row) => row.role?.level)
+    .filter((level): level is number => typeof level === 'number');
+
+  mayWrite = outranks(session, levels.length ? Math.min(...levels) : 999);
+}
+
 /* ---------------------------------------------------------------- handlers */
-if (Astro.request.method === 'POST' && supabase && id) {
+if (Astro.request.method === 'POST' && !mayWrite) {
+  notice = {
+    kind: 'error',
+    message:
+      'You cannot change this account: it is your own, or it is at or above your own role level.',
+  };
+}
+
+if (Astro.request.method === 'POST' && supabase && id && mayWrite) {
   const form = await Astro.request.formData();
   const action = String(form.get('action') ?? '');
 
