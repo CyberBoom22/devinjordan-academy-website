@@ -182,9 +182,12 @@ const visibleGroups = NAV.map((group) => ({
           <form method="POST" action="/admin/logout" style="margin-top:14px">
             <button type="submit" class="btn-admin secondary">Sign out</button>
           </form>
-          <p style="margin-top:14px">
-            <a href="/" style="color:var(--text-muted);font-size:0.8rem">← View the website</a>
-          </p>
+          {
+            /* The other half of the loop: the public pages carry an admin bar
+              back to here, so managing the site does not run through the
+              address bar in either direction. */
+          }
+          <a href="/" class="admin-viewsite">View the website →</a>
         </div>
       </aside>
 
@@ -194,3 +197,27 @@ const visibleGroups = NAV.map((group) => ({
     </div>
   </body>
 </html>
+
+<style>
+  .admin-viewsite {
+    display: block;
+    margin-top: 14px;
+    padding: 9px 12px;
+    border: 1px solid var(--hairline);
+    border-radius: 3px;
+    color: var(--text-muted);
+    font-family: var(--font-heading);
+    font-size: 0.64rem;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    text-align: center;
+    text-decoration: none;
+  }
+
+  .admin-viewsite:hover,
+  .admin-viewsite:focus-visible {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+</style>

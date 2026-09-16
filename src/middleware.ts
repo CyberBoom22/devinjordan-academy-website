@@ -94,6 +94,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
   applySecurityHeaders(response.headers, {
     isDev: import.meta.env.DEV,
     isAdmin: isAdminRoute,
+    isAuthenticated: context.locals.session.user !== null,
     isHttps: context.url.protocol === 'https:',
     runtimeEnv,
   });

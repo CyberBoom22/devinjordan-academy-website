@@ -18,12 +18,18 @@ type Options = {
   isDev: boolean;
   /** Admin pages must never be cached or indexed. */
   isAdmin: boolean;
+  /**
+   * Whether this response was rendered for a signed-in account. A public page
+   * shown to one carries their name in the admin bar, and a shared cache that
+   * kept it would hand that to the next visitor.
+   */
+  isAuthenticated: boolean;
   runtimeEnv?: Record<string, string | undefined>;
   isHttps: boolean;
 };
 
 export function applySecurityHeaders(headers: Headers, options: Options): void {
-  const { isDev, isAdmin, runtimeEnv, isHttps } = options;
+  const { isDev, isAdmin, isAuthenticated, runtimeEnv, isHttps } = options;
 
   // The admin area talks to Supabase directly from the browser, so its origin
   // has to be reachable. Nothing else is.
@@ -73,6 +79,11 @@ export function applySecurityHeaders(headers: Headers, options: Options): void {
   // development would lock the developer's browser onto https://localhost.
   if (isHttps && !isDev) {
     headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+  }
+
+  // Personalised but public: cacheable only by the one browser it belongs to.
+  if (isAuthenticated && !isAdmin) {
+    headers.set('Cache-Control', 'private, no-store');
   }
 
   if (isAdmin) {
