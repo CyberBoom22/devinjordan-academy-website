@@ -3,9 +3,16 @@
  *
  * The expensive half is guarded by a hash. A document whose body has not
  * changed since the last run is counted and dropped — no reclassification, no
- * model call, no write. That single check is the difference between a scanner
- * that costs pennies a month and one that re-summarises the whole of 27 CFR
- * every night.
+ * write, nothing queued. That single check is the difference between a scanner
+ * that costs pennies a month and one that re-reads the whole of 27 CFR every
+ * night.
+ *
+ * Translation is NOT done here. See src/lib/scan/translate.ts: finding a law
+ * and explaining it have different costs and different failure modes, and when
+ * they shared a step a model outage silently cost the corpus a summary nothing
+ * would ever revisit — the source text was unchanged, so its hash never moved
+ * again. The scan files what it found and marks it pending; the translation
+ * stage drains that queue on its own terms.
  */
 
 import type { Client } from '../supabase/server';
@@ -46,101 +53,6 @@ const CATEGORY_PATTERNS: [string, RegExp][] = [
 function classify(doc: FetchedDoc): string[] {
   const text = `${doc.title}\n${doc.body}`;
   return CATEGORY_PATTERNS.filter(([, pattern]) => pattern.test(text)).map(([key]) => key);
-}
-
-/* -------------------------------------------------------------- translating */
-type AiConfig = { provider: string; model: string | null; apiKey: string; enabled: boolean };
-
-const PROMPT_VERSION = 'v1';
-
-const SYSTEM_PROMPT = [
-  'You explain firearms law to people training for security work in the United States.',
-  'Summarise the provided text in plain English, in at most four sentences.',
-  'State only what the text says. Do not add exceptions, penalties or related rules it does not mention.',
-  'Do not give legal advice, do not tell the reader what they may or may not do personally,',
-  'and do not speculate about how a court would read it.',
-  'If the text is a proposal rather than law in force, say so.',
-  'If the text is too fragmentary to summarise, reply exactly: INSUFFICIENT.',
-].join(' ');
-
-async function summarise(doc: FetchedDoc, ai: AiConfig): Promise<string | null> {
-  // Deliberately capped: statutes are long, the first part carries the operative
-  // language, and an unbounded body is an unbounded bill.
-  const text = doc.body.slice(0, 12_000);
-  if (text.length < 40) return null;
-
-  const user = `Citation: ${doc.citation}\nTitle: ${doc.title}\n\n${text}`;
-
-  try {
-    if (ai.provider === 'anthropic') {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-api-key': ai.apiKey,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify({
-          model: ai.model || 'claude-sonnet-5',
-          max_tokens: 400,
-          system: SYSTEM_PROMPT,
-          messages: [{ role: 'user', content: user }],
-        }),
-        signal: AbortSignal.timeout(30_000),
-      });
-      if (!response.ok) return null;
-      const payload = (await response.json()) as { content?: { text?: string }[] };
-      return payload.content?.[0]?.text?.trim() ?? null;
-    }
-
-    if (ai.provider === 'openai') {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${ai.apiKey}` },
-        body: JSON.stringify({
-          model: ai.model || 'gpt-4o-mini',
-          max_tokens: 400,
-          messages: [
-            { role: 'system', content: SYSTEM_PROMPT },
-            { role: 'user', content: user },
-          ],
-        }),
-        signal: AbortSignal.timeout(30_000),
-      });
-      if (!response.ok) return null;
-      const payload = (await response.json()) as {
-        choices?: { message?: { content?: string } }[];
-      };
-      return payload.choices?.[0]?.message?.content?.trim() ?? null;
-    }
-
-    if (ai.provider === 'google') {
-      const model = ai.model || 'gemini-2.0-flash';
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${ai.apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-            contents: [{ parts: [{ text: user }] }],
-          }),
-          signal: AbortSignal.timeout(30_000),
-        },
-      );
-      if (!response.ok) return null;
-      const payload = (await response.json()) as {
-        candidates?: { content?: { parts?: { text?: string }[] } }[];
-      };
-      return payload.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? null;
-    }
-  } catch {
-    // A summary is a convenience. Losing one costs a sentence on a page; losing
-    // the run costs the citation and the link, which are the actual product.
-    return null;
-  }
-
-  return null;
 }
 
 /* ------------------------------------------------------------------ the run */
@@ -195,39 +107,21 @@ export async function runScan(
   };
 
   try {
-    const [{ data: source }, { data: settings }, { data: aiRow }, { data: nodes }] =
-      await Promise.all([
-        supabase.from('legislation_sources').select('config').eq('key', sourceKey).maybeSingle(),
-        supabase.from('scan_settings').select('*').eq('id', true).maybeSingle(),
-        supabase
-          .from('ai_settings')
-          .select('provider, model, api_key, enabled')
-          .eq('id', true)
-          .maybeSingle(),
-        supabase.from('jurisdiction_nodes').select('id, code'),
-      ]);
+    // No AI read here at all: the scan does not translate, so it has no
+    // business holding a key.
+    const [{ data: source }, { data: settings }, { data: nodes }] = await Promise.all([
+      supabase.from('legislation_sources').select('config').eq('key', sourceKey).maybeSingle(),
+      supabase.from('scan_settings').select('*').eq('id', true).maybeSingle(),
+      supabase.from('jurisdiction_nodes').select('id, code'),
+    ]);
 
     const nodeIdByCode = new Map(
       ((nodes ?? []) as { id: string; code: string }[]).map((n) => [n.code, n.id]),
     );
 
-    const ai = aiRow as AiConfig | null;
-    const canSummarise = Boolean(ai?.enabled && ai?.apiKey);
-
     const autoPublish = Boolean((settings as { auto_publish?: boolean } | null)?.auto_publish);
     const redraftOnChange =
       (settings as { redraft_on_change?: boolean } | null)?.redraft_on_change !== false;
-
-    if (adapter.requiresKey) {
-      // A source that needs a key it has not been given is a configuration
-      // problem, not an empty result.
-      const { data: keyed } = await supabase
-        .from('legislation_sources')
-        .select('requires_key')
-        .eq('key', sourceKey)
-        .maybeSingle();
-      void keyed;
-    }
 
     const docs = await adapter.fetch({
       config: ((source as { config?: Record<string, unknown> } | null)?.config ?? {}) as Record<
@@ -293,13 +187,6 @@ export async function runScan(
         .eq('citation', doc.citation)
         .maybeSingle();
 
-      let summary: string | null = null;
-      if (canSummarise && ai) {
-        summary = await summarise(doc, ai);
-        if (summary === 'INSUFFICIENT') summary = null;
-        if (summary) outcome.summariesGenerated += 1;
-      }
-
       // A published entry whose law has changed goes back to draft unless the
       // academy has said otherwise: otherwise the page keeps serving text that
       // was approved before the amendment.
@@ -324,10 +211,15 @@ export async function runScan(
         introduced_at: doc.introducedAt ?? null,
         enacted_at: doc.enactedAt ?? null,
         effective_at: doc.effectiveAt ?? null,
-        plain_summary: summary,
-        summary_model: summary ? (ai?.model ?? ai?.provider ?? null) : null,
-        summary_prompt_version: summary ? PROMPT_VERSION : null,
-        summary_generated_at: summary ? new Date().toISOString() : null,
+        // The text changed, so any summary of the old text is now wrong.
+        // Cleared and re-queued rather than left to look current.
+        plain_summary: null,
+        summary_status: 'pending',
+        summary_attempts: 0,
+        summary_error: null,
+        summary_model: null,
+        summary_prompt_version: null,
+        summary_generated_at: null,
         status,
         auto_published: autoPublish,
         last_seen_at: new Date().toISOString(),

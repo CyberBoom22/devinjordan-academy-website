@@ -18,6 +18,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
 import { can } from '../../../lib/auth/session';
 import { runScan } from '../../../lib/scan/run';
 import { NOT_YET_IMPLEMENTED } from '../../../lib/scan/sources';
+import { runTranslation } from '../../../lib/scan/translate';
 
 const { supabase, session } = Astro.locals;
 
@@ -78,6 +79,27 @@ if (Astro.request.method === 'POST' && supabase) {
         };
   }
 
+  if (action === 'translate' && can(session, 'news.write')) {
+    const result = await runTranslation(supabase);
+    notice = result.error
+      ? { kind: 'error', message: result.error }
+      : {
+          kind: 'success',
+          message:
+            `Translated ${result.written} of ${result.attempted}. ` +
+            `${result.insufficient} too fragmentary to summarise, ${result.failed} failed.`,
+        };
+  }
+
+  if (action === 'requeue' && can(session, 'news.write')) {
+    const { data, error } = await supabase.rpc('retranslate_all', {
+      p_include_ok: form.get('includeOk') === 'on',
+    });
+    notice = error
+      ? { kind: 'error', message: error.message }
+      : { kind: 'success', message: `${data} entries queued for translation.` };
+  }
+
   if (action === 'publish' && mayPublish) {
     const { error } = await supabase
       .from('legislation_entries')
@@ -136,6 +158,9 @@ let settings: Settings | null = null;
 let sources: Source[] = [];
 let runs: Run[] = [];
 let drafts: Entry[] = [];
+let pendingTranslation = 0;
+let ai: { provider: string; model: string | null; enabled: boolean; has_key: boolean } | null =
+  null;
 
 if (supabase) {
   const [s, src, r, d] = await Promise.all([
@@ -154,6 +179,19 @@ if (supabase) {
       .order('first_seen_at', { ascending: false })
       .limit(50),
   ]);
+
+  const { count } = await supabase
+    .from('translation_queue')
+    .select('id', { count: 'exact', head: true });
+  pendingTranslation = count ?? 0;
+
+  const { data: aiSafe } = await supabase.from('ai_settings_safe').select('*').maybeSingle();
+  ai = (aiSafe ?? null) as unknown as {
+    provider: string;
+    model: string | null;
+    enabled: boolean;
+    has_key: boolean;
+  } | null;
 
   settings = (s.data ?? null) as unknown as Settings | null;
   sources = (src.data ?? []) as unknown as Source[];
@@ -313,6 +351,55 @@ if (supabase) {
   </div>
 
   <div class="admin-card">
+    <h2>Plain English</h2>
+    <p>
+      The stage between a scan and the public page. Findings arrive with their citation, their
+      verbatim text and a link; this is what turns that into something readable. It runs separately,
+      because a model outage should cost a sentence and never a citation.
+    </p>
+
+    <p class="stage-state">
+      {
+        ai?.enabled && ai?.has_key
+          ? `${ai.provider}${ai.model ? ` · ${ai.model}` : ''}`
+          : 'No provider configured — entries keep their citation and link, and wait here.'
+      }
+      <span class="stage-count">{pendingTranslation} waiting</span>
+    </p>
+
+    {
+      mayWrite && (
+        <div class="stage-actions">
+          <form method="POST">
+            <input type="hidden" name="action" value="translate" />
+            <button type="submit" class="btn-admin" disabled={pendingTranslation === 0}>
+              Translate next 10
+            </button>
+          </form>
+
+          <form method="POST">
+            <input type="hidden" name="action" value="requeue" />
+            <label class="checkline">
+              <input type="checkbox" name="includeOk" />
+              <span>including ones already written</span>
+            </label>
+            <button type="submit" class="btn-admin secondary">
+              Re-queue everything
+            </button>
+          </form>
+        </div>
+      )
+    }
+
+    <p class="hint">
+      Re-queue after changing the model or the prompt: otherwise an improvement only reaches
+      documents that happen to change afterwards, and the corpus ends up explained by whichever
+      prompt was current on the day each entry arrived. A failure is retried three times, then left
+      alone — past that it is configuration, not weather.
+    </p>
+  </div>
+
+  <div class="admin-card">
     <h2>Recent runs</h2>
     {runs.length === 0 && <p class="hint">The scanner has not run yet.</p>}
     {
@@ -424,6 +511,45 @@ if (supabase) {
   .scan-table td {
     padding: 9px 10px;
     border-bottom: 1px solid var(--hairline);
+  }
+
+  .stage-state {
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    padding: 10px 12px;
+    background: var(--bg-card-alt);
+    border: 1px solid var(--hairline);
+    border-radius: 3px;
+    margin-bottom: 14px;
+  }
+
+  .stage-count {
+    color: var(--accent);
+    font-family: var(--font-heading);
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+
+  .stage-actions {
+    display: flex;
+    gap: 18px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+
+  .stage-actions form {
+    display: flex;
+    gap: 10px;
+    align-items: center;
   }
 
   .src-todo {
