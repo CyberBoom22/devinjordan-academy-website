@@ -25,7 +25,10 @@ if (!supabase || !session.user) {
 }
 
 let error: string | null = null;
+/** Set when the QR can be an <img src>. */
 let qrSrc: string | null = null;
+/** Set when the API handed back SVG markup to drop straight into the page. */
+let qrSvg: string | null = null;
 let secret: string | null = null;
 let factorId = '';
 
@@ -86,9 +89,28 @@ if (Astro.request.method === 'GET') {
   } else if ('totp' in enrolled) {
     factorId = enrolled.id;
     secret = enrolled.totp.secret;
-    // The API hands back raw SVG, not a URL. Encoded rather than interpolated
-    // because an unescaped '#' inside the markup truncates the data URI.
-    qrSrc = `data:image/svg+xml;utf-8,${encodeURIComponent(enrolled.totp.qr_code)}`;
+
+    // What `qr_code` actually contains is not settled: Supabase's own typings
+    // say to prepend `data:image/svg+xml;utf-8,`, while the example two lines
+    // above passes the value straight to an <img src>. So look at it rather
+    // than trust either.
+    //
+    // That `;utf-8` is also wrong on its face — a media type parameter needs a
+    // name and a value, and Chrome is entitled to reject the whole type over
+    // it. Hence `;charset=utf-8` below, which is the same intent spelled
+    // correctly.
+    const raw = enrolled.totp.qr_code ?? '';
+
+    if (raw.startsWith('data:')) {
+      qrSrc = raw;
+    } else if (raw.trimStart().startsWith('<')) {
+      // Markup. Inlining it skips data-URI encoding altogether, which is one
+      // fewer thing between the code and the screen. An <svg> element is not
+      // script, so the Content Security Policy has no quarrel with it.
+      qrSvg = raw;
+    } else {
+      qrSrc = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(raw)}`;
+    }
   }
 }
 
@@ -118,7 +140,7 @@ const csrfToken = issueCsrfToken(Astro.cookies, Astro.url);
         {error && <div class="notice error">{error}</div>}
 
         {
-          qrSrc && (
+          (qrSrc || qrSvg) && (
             <>
               <ol class="mfa-steps">
                 <li>
@@ -130,12 +152,21 @@ const csrfToken = issueCsrfToken(Astro.cookies, Astro.url);
               </ol>
 
               <div class="mfa-qr">
-                <img
-                  src={qrSrc}
-                  alt="QR code for enrolling your authenticator app"
-                  width="200"
-                  height="200"
-                />
+                {qrSvg ? (
+                  <div
+                    class="mfa-qr-svg"
+                    role="img"
+                    aria-label="QR code for enrolling your authenticator app"
+                    set:html={qrSvg}
+                  />
+                ) : (
+                  <img
+                    src={qrSrc}
+                    alt="QR code for enrolling your authenticator app"
+                    width="200"
+                    height="200"
+                  />
+                )}
               </div>
 
               <div class="field">
@@ -173,7 +204,7 @@ const csrfToken = issueCsrfToken(Astro.cookies, Astro.url);
         </form>
 
         {
-          !qrSrc && (
+          !qrSrc && !qrSvg && (
             <p class="login-foot">
               <a href="/admin/setup-2fa">Start again with a new code</a>
             </p>
@@ -203,10 +234,17 @@ const csrfToken = issueCsrfToken(Astro.cookies, Astro.url);
       }
 
       /* The QR is dark-on-transparent; on a dark card that is invisible. */
-      .mfa-qr img {
+      .mfa-qr img,
+      .mfa-qr-svg {
         background: #fff;
         padding: 10px;
         border-radius: 4px;
+      }
+
+      .mfa-qr-svg :global(svg) {
+        display: block;
+        width: 200px;
+        height: 200px;
       }
 
       .mfa-secret {
