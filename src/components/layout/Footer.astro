@@ -59,11 +59,28 @@ const owner = settings['legal.copyright'] ?? settings['site.name'];
     <a href="/about">About</a> ·
     <a href="/news">News</a> ·
     <a href="/ori">ORI Directory</a> ·
-    <a href="/#contact">Contact</a>
+    <a href="/#contact">Contact</a> ·
+    <a href="/admin/login" class="footer-staff" rel="nofollow">Staff login</a>
   </p>
 </footer>
 
 <style>
+  /* The staff login.
+     Labelled "Staff" because there is no public sign-up — without the word, a
+     visitor reads "Login" as an account they could have, and finds a door that
+     never opens for them. Rendered quieter than its siblings for the same
+     reason: it is here for the handful of people who need it, and should never
+     compete with the links everyone else came for. `rel="nofollow"` because
+     /admin is noindex anyway, so there is nothing to gain from crawling it. */
+  .footer-staff {
+    opacity: 0.6;
+  }
+
+  .footer-staff:hover,
+  .footer-staff:focus-visible {
+    opacity: 1;
+  }
+
   footer {
     text-align: center;
     padding: 40px 20px;
