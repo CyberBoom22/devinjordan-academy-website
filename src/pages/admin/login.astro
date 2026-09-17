@@ -34,6 +34,8 @@ if (Astro.request.method === 'GET' && session.user && session.permissions.has('a
 const errorParam = Astro.url.searchParams.get('error');
 if (errorParam === 'suspended') {
   error = 'That account has been suspended. Ask an administrator to restore it.';
+} else if (errorParam === 'expired') {
+  error = 'You were signed out because the session had been open too long. Sign in again.';
 } else if (errorParam === 'no-access') {
   error =
     'That account exists but has not been given access to the admin area. Ask an administrator to assign a role.';

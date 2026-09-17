@@ -24,6 +24,17 @@ export type SessionUser = {
   /** Best (lowest) role level held. 999 means no role at all. */
   level: number;
   roles: { key: string; name: string; level: number }[];
+  /**
+   * When this person last actually signed in — typed a password and answered
+   * the second factor.
+   *
+   * Not the same as the access token's age. Supabase refreshes that roughly
+   * hourly and rotates the refresh token behind it indefinitely, which is why
+   * a session left alone never ends on its own. This timestamp does not move
+   * on a refresh, so it is the only thing that can answer "how long have they
+   * been signed in".
+   */
+  lastSignInAt: string | null;
 };
 
 export type Session = {
@@ -81,6 +92,7 @@ export async function loadSession(supabase: Client | null): Promise<Session> {
             status: profile.status,
             level: 999,
             roles: [],
+            lastSignInAt: user.last_sign_in_at ?? null,
           }
         : null,
       permissions: new Set(),
@@ -116,6 +128,7 @@ export async function loadSession(supabase: Client | null): Promise<Session> {
       status: profile.status,
       level: roleRows.length ? Math.min(...roleRows.map((r) => r.level)) : 999,
       roles: roleRows.map(({ key, name, level }) => ({ key, name, level })),
+      lastSignInAt: user.last_sign_in_at ?? null,
     },
     permissions,
   };
@@ -137,4 +150,27 @@ export function canAny(session: Session, ...permissions: Permission[]): boolean 
  */
 export function outranks(session: Session, targetLevel: number): boolean {
   return session.user !== null && session.user.level < targetLevel;
+}
+
+/**
+ * How long a signed-in session may last before the password and second factor
+ * have to be presented again.
+ *
+ * Supabase on its own never ends a session: the access token expires hourly
+ * but the refresh token rotates indefinitely, so a browser left open stays
+ * signed in until somebody clears it. For an admin area that can suspend
+ * accounts and mint invites, "until somebody clears it" is the wrong answer —
+ * the realistic threat is not a stolen token, it is a laptop left unlocked.
+ */
+export const MAX_SESSION_HOURS = 2;
+
+/** Has this session outlived MAX_SESSION_HOURS? */
+export function sessionExpired(session: Session, maxHours = MAX_SESSION_HOURS): boolean {
+  const signedInAt = session.user?.lastSignInAt;
+  // Unknown age is not treated as expired: signing people out on a field the
+  // provider happened not to return would be a self-inflicted outage.
+  if (!signedInAt) return false;
+
+  const age = Date.now() - new Date(signedInAt).getTime();
+  return Number.isFinite(age) && age > maxHours * 60 * 60 * 1000;
 }

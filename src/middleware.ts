@@ -9,7 +9,7 @@
 
 import { defineMiddleware } from 'astro:middleware';
 import { createRequestClient } from './lib/supabase/server';
-import { loadSession, EMPTY_SESSION } from './lib/auth/session';
+import { loadSession, EMPTY_SESSION, sessionExpired } from './lib/auth/session';
 import { applySecurityHeaders } from './lib/security';
 
 /** Admin routes that a signed-out visitor is allowed to reach. */
@@ -58,6 +58,17 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
     if (user.status === 'suspended') {
       return context.redirect('/admin/login?error=suspended', 302);
+    }
+
+    // Age before authority. Supabase rotates refresh tokens indefinitely, so a
+    // session left alone never ends on its own — and the realistic threat to an
+    // admin area that can suspend accounts and mint invites is not a stolen
+    // token, it is a laptop left unlocked. Checked on the way in rather than
+    // trusted to a background job, so an expired session cannot serve even one
+    // more page.
+    if (sessionExpired(context.locals.session)) {
+      await supabase?.auth.signOut();
+      return context.redirect('/admin/login?error=expired', 302);
     }
 
     if (!permissions.has('admin.access')) {
