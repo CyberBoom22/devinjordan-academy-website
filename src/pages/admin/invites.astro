@@ -10,6 +10,8 @@
  */
 import AdminLayout from '../../layouts/AdminLayout.astro';
 import { can, outranks } from '../../lib/auth/session';
+import { getMailConfig, sendEmail } from '../../lib/email/send';
+import { buildInviteEmail } from '../../lib/email/invite';
 
 const { supabase, session } = Astro.locals;
 
@@ -20,6 +22,8 @@ if (!can(session, 'user.invite')) {
 type Row = {
   id: string;
   email: string;
+  first_name: string | null;
+  last_name: string | null;
   full_name: string | null;
   role_key: string;
   role_name: string;
@@ -36,12 +40,71 @@ type Row = {
   redeemed_by_email: string | null;
   status: 'active' | 'expired' | 'revoked' | 'redeemed';
   days_left: number;
+  delivery_status: 'not_sent' | 'sent' | 'failed' | 'bounced';
+  sent_at: string | null;
+  send_attempts: number;
+  delivery_error: string | null;
 };
 
 let notice: { kind: 'success' | 'error'; message: string } | null = null;
 /** The plaintext, for this render only. */
 let mintedCode: string | null = null;
 let mintedFor: string | null = null;
+/** What became of the email, so the screen can say rather than imply. */
+type Delivery = { ok: boolean; message: string };
+let delivery: Delivery | null = null;
+
+const mail = getMailConfig(Astro.locals.runtime?.env as Record<string, string | undefined>);
+
+/**
+ * Post the code, and record what happened.
+ *
+ * Deliberately never throws. By the time this runs the invite exists; an
+ * exception here would lose the plaintext in a stack trace while the invite sat
+ * in the database unusable. The screen keeps showing the code either way —
+ * an invite email is structurally a phishing email, so some will land in spam
+ * however clean the DNS is, and when that happens the fallback needs to already
+ * be in front of the person who can act on it.
+ */
+async function deliver(
+  inviteId: string,
+  code: string,
+  row: Row | null,
+  to: string,
+): Promise<Delivery> {
+  if (!supabase) return { ok: false, message: 'No database connection, so nothing was emailed.' };
+
+  if (!mail) {
+    return {
+      ok: false,
+      message: 'No sending key is configured, so nothing was emailed. Pass the code on yourself.',
+    };
+  }
+
+  const envelope = buildInviteEmail({
+    code,
+    firstName: row?.first_name ?? null,
+    roleName: row?.role_name ?? 'a staff account',
+    invitedBy: session.user?.fullName ?? session.user?.email ?? null,
+    expiresAt: row?.expires_at ? new Date(row.expires_at) : new Date(Date.now() + 14 * 86400_000),
+    registerUrl: `${import.meta.env.PUBLIC_SITE_URL ?? ''}/admin/register`,
+    academyName: 'Devin Jordan Security Training Academy',
+  });
+
+  const result = await sendEmail({ ...envelope, to }, mail);
+
+  await supabase.rpc('record_invite_delivery', {
+    p_invite: inviteId,
+    p_status: result.ok ? 'sent' : 'failed',
+    p_to: to,
+    p_message_id: result.ok ? result.messageId : null,
+    p_error: result.ok ? null : result.error,
+  });
+
+  return result.ok
+    ? { ok: true, message: `Emailed to ${to}.` }
+    : { ok: false, message: `Could not email it: ${result.error} — pass the code on yourself.` };
+}
 
 if (Astro.request.method === 'POST' && supabase) {
   const form = await Astro.request.formData();
@@ -61,6 +124,20 @@ if (Astro.request.method === 'POST' && supabase) {
     else {
       mintedCode = String(data);
       mintedFor = String(form.get('email') ?? '').trim();
+
+      // issue_invite returns the code, not the row. The newest unredeemed
+      // invite for that address is the one just made.
+      const { data: fresh } = await supabase
+        .from('invite_overview')
+        .select('*')
+        .eq('email', mintedFor.toLowerCase())
+        .is('redeemed_at', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const row = (fresh ?? null) as unknown as Row | null;
+      if (row) delivery = await deliver(row.id, mintedCode, row, mintedFor);
     }
   }
 
@@ -72,6 +149,20 @@ if (Astro.request.method === 'POST' && supabase) {
     else {
       mintedCode = String(data);
       mintedFor = String(form.get('email') ?? '');
+
+      const inviteId = String(form.get('inviteId') ?? '');
+      const { data: fresh } = await supabase
+        .from('invite_overview')
+        .select('*')
+        .eq('id', inviteId)
+        .maybeSingle();
+
+      delivery = await deliver(
+        inviteId,
+        mintedCode,
+        (fresh ?? null) as unknown as Row | null,
+        mintedFor,
+      );
     }
   }
 
@@ -164,6 +255,12 @@ function when(value: string | null): string {
           and only time it can be displayed — leaving this page loses it, and the only way back is
           to issue a new one.
         </p>
+        {delivery && (
+          <p class:list={['minted-delivery', delivery.ok ? 'is-ok' : 'is-bad']}>
+            {delivery.message}
+          </p>
+        )}
+
         <p class="minted-code">{mintedCode}</p>
         <p class="hint">
           Send it however you would send a password. They redeem it at <code>/admin/register</code>.
@@ -292,6 +389,14 @@ function when(value: string | null): string {
                 {row.redeemed_at && <> · redeemed {when(row.redeemed_at)}</>}
                 {row.revoked_at && <> · revoked {when(row.revoked_at)}</>}
                 {row.note && <> · {row.note}</>}
+                {row.delivery_status === 'sent' && <> · emailed</>}
+                {(row.delivery_status === 'failed' || row.delivery_status === 'bounced') && (
+                  <span class="invite-bounced">
+                    {' · email '}
+                    {row.delivery_status}
+                    {row.delivery_error ? `: ${row.delivery_error}` : ''}
+                  </span>
+                )}
               </div>
 
               {row.status !== 'redeemed' && (
@@ -341,6 +446,23 @@ function when(value: string | null): string {
     text-align: center;
     margin: 14px 0 10px;
     user-select: all;
+  }
+
+  .minted-delivery {
+    margin: 10px 0 0 0;
+    font-size: 0.88rem;
+  }
+
+  .minted-delivery.is-ok {
+    color: var(--status-ok-text);
+  }
+
+  .minted-delivery.is-bad {
+    color: var(--status-warn-text, #d0a45a);
+  }
+
+  .invite-bounced {
+    color: var(--status-warn-text, #d0a45a);
   }
 
   .invite-grid {

@@ -1,0 +1,364 @@
+---
+/**
+ * Required forms, from the inside.
+ *
+ * Add, publish, and record when somebody last checked a link. Deliberately
+ * plain: the value of this screen is the discipline it enforces, not its
+ * features. Every form needs a link to the issuing agency — the database
+ * refuses one without — and the verified date is a button rather than a field,
+ * because it should only ever mean "I opened that link just now and it was
+ * right", never "I typed a date".
+ */
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { can } from '../../lib/auth/session';
+
+const { supabase, session } = Astro.locals;
+
+if (!can(session, 'page.read')) {
+  return Astro.redirect('/admin?error=forbidden', 303);
+}
+
+const mayWrite = can(session, 'page.write');
+
+type Category = { key: string; label: string };
+type FormRow = {
+  id: string;
+  category_key: string | null;
+  name: string;
+  form_number: string | null;
+  issuing_agency: string;
+  source_url: string;
+  audience: string;
+  is_required: boolean;
+  status: string;
+  last_verified_at: string | null;
+  sort_order: number;
+};
+
+let notice: { kind: 'success' | 'error'; message: string } | null = null;
+
+if (Astro.request.method === 'POST' && supabase && mayWrite) {
+  const form = await Astro.request.formData();
+  const action = String(form.get('action') ?? '');
+  const id = String(form.get('id') ?? '');
+
+  if (action === 'add') {
+    const { error } = await supabase.from('required_forms').insert({
+      name: String(form.get('name') ?? '').trim(),
+      form_number: String(form.get('formNumber') ?? '').trim() || null,
+      issuing_agency: String(form.get('agency') ?? '').trim(),
+      source_url: String(form.get('url') ?? '').trim(),
+      category_key: String(form.get('category') ?? '') || null,
+      jurisdiction_code: String(form.get('jurisdiction') ?? '') || null,
+      description: String(form.get('description') ?? '').trim() || null,
+      notes: String(form.get('notes') ?? '').trim() || null,
+      audience: String(form.get('audience') ?? 'student'),
+      is_required: form.get('required') === 'on',
+      sort_order: Number(form.get('sortOrder') ?? 0),
+      created_by: session.user?.id,
+    });
+    notice = error
+      ? { kind: 'error', message: error.message }
+      : {
+          kind: 'success',
+          message: 'Added as a draft. Publish it when the link has been checked.',
+        };
+  }
+
+  if (action === 'publish' || action === 'unpublish') {
+    const publishing = action === 'publish';
+    const { error } = await supabase
+      .from('required_forms')
+      .update({
+        status: publishing ? 'published' : 'draft',
+        published_at: publishing ? new Date().toISOString() : null,
+        updated_by: session.user?.id,
+      })
+      .eq('id', id);
+    notice = error
+      ? { kind: 'error', message: error.message }
+      : { kind: 'success', message: publishing ? 'Published.' : 'Back to draft.' };
+  }
+
+  if (action === 'verify') {
+    const { error } = await supabase
+      .from('required_forms')
+      .update({
+        last_verified_at: new Date().toISOString().slice(0, 10),
+        verified_by: session.user?.id,
+        updated_by: session.user?.id,
+      })
+      .eq('id', id);
+    notice = error
+      ? { kind: 'error', message: error.message }
+      : { kind: 'success', message: 'Marked as checked today.' };
+  }
+
+  if (action === 'delete') {
+    const { error } = await supabase.from('required_forms').delete().eq('id', id);
+    notice = error
+      ? { kind: 'error', message: error.message }
+      : { kind: 'success', message: 'Deleted.' };
+  }
+}
+
+let categories: Category[] = [];
+let rows: FormRow[] = [];
+let jurisdictions: { code: string; name: string }[] = [];
+
+if (supabase) {
+  const [cats, forms, juris] = await Promise.all([
+    supabase.from('form_categories').select('key, label').order('sort_order'),
+    supabase.from('required_forms').select('*').order('sort_order'),
+    supabase.from('jurisdictions').select('code, name').order('sort_order'),
+  ]);
+  categories = (cats.data ?? []) as unknown as Category[];
+  rows = (forms.data ?? []) as unknown as FormRow[];
+  jurisdictions = (juris.data ?? []) as unknown as { code: string; name: string }[];
+}
+
+/** A link nobody has checked in a year is the failure this page exists to catch. */
+function stale(value: string | null): boolean {
+  if (!value) return true;
+  const checked = new Date(`${value}T00:00:00`).getTime();
+  return Date.now() - checked > 365 * 24 * 60 * 60 * 1000;
+}
+---
+
+<AdminLayout title="Required forms">
+  <div class="admin-head">
+    <h1>Required forms</h1>
+    <p>
+      What students must complete, and where it lives. Every entry links to the issuing agency — the
+      academy hosts no copies, because a mirrored PDF goes stale without anyone noticing.
+    </p>
+  </div>
+
+  {notice && <div class:list={['notice', notice.kind]}>{notice.message}</div>}
+
+  {
+    mayWrite && (
+      <div class="admin-card">
+        <h2>Add a form</h2>
+        <form method="POST">
+          <input type="hidden" name="action" value="add" />
+          <div class="forms-grid">
+            <div class="field">
+              <label for="name">Name</label>
+              <input type="text" id="name" name="name" required />
+            </div>
+            <div class="field">
+              <label for="formNumber">Form number</label>
+              <input type="text" id="formNumber" name="formNumber" placeholder="if it has one" />
+            </div>
+            <div class="field">
+              <label for="agency">Issuing agency</label>
+              <input type="text" id="agency" name="agency" required />
+            </div>
+            <div class="field">
+              <label for="url">Link on the agency's site</label>
+              <input type="url" id="url" name="url" required placeholder="https://" />
+            </div>
+            <div class="field">
+              <label for="category">Category</label>
+              <select id="category" name="category">
+                {categories.map((c) => (
+                  <option value={c.key}>{c.label}</option>
+                ))}
+              </select>
+            </div>
+            <div class="field">
+              <label for="jurisdiction">Jurisdiction</label>
+              <select id="jurisdiction" name="jurisdiction">
+                {jurisdictions.map((j) => (
+                  <option value={j.code}>{j.name}</option>
+                ))}
+              </select>
+            </div>
+            <div class="field">
+              <label for="audience">Who completes it</label>
+              <select id="audience" name="audience">
+                <option value="student">The student</option>
+                <option value="instructor">The instructor</option>
+                <option value="employer">The employer</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="sortOrder">Order</label>
+              <input type="number" id="sortOrder" name="sortOrder" value="0" />
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="description">What it is</label>
+            <input type="text" id="description" name="description" />
+          </div>
+
+          <div class="field">
+            <label for="notes">Before you go</label>
+            <input
+              type="text"
+              id="notes"
+              name="notes"
+              placeholder="e.g. bring two forms of ID; must be notarised"
+            />
+          </div>
+
+          <div class="field">
+            <label class="checkline">
+              <input type="checkbox" name="required" checked />
+              <span>Required, not optional</span>
+            </label>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn-admin">
+              Add as draft
+            </button>
+          </div>
+        </form>
+      </div>
+    )
+  }
+
+  <div class="admin-card">
+    <h2>All forms</h2>
+    {rows.length === 0 && <p class="hint">Nothing added yet. The public page says so honestly.</p>}
+
+    {
+      rows.map((row) => (
+        <div class="fr-row">
+          <div>
+            <strong>{row.name}</strong>
+            {row.form_number && <span class="fr-num mono">{row.form_number}</span>}
+            <span class:list={['fr-status', `is-${row.status}`]}>{row.status}</span>
+            {!row.is_required && <span class="fr-opt">optional</span>}
+
+            <div class="fr-meta">
+              {row.issuing_agency}
+              {' · '}
+              <a href={row.source_url} target="_blank" rel="noopener noreferrer">
+                link
+              </a>
+              {' · '}
+              {row.last_verified_at ? (
+                <span class:list={{ 'fr-stale': stale(row.last_verified_at) }}>
+                  checked {row.last_verified_at}
+                  {stale(row.last_verified_at) && ' — over a year ago'}
+                </span>
+              ) : (
+                <span class="fr-stale">never checked</span>
+              )}
+            </div>
+          </div>
+
+          {mayWrite && (
+            <div class="fr-actions">
+              <form method="POST">
+                <input type="hidden" name="action" value="verify" />
+                <input type="hidden" name="id" value={row.id} />
+                <button type="submit" class="btn-admin secondary small">
+                  Checked today
+                </button>
+              </form>
+              <form method="POST">
+                <input
+                  type="hidden"
+                  name="action"
+                  value={row.status === 'published' ? 'unpublish' : 'publish'}
+                />
+                <input type="hidden" name="id" value={row.id} />
+                <button type="submit" class="btn-admin small">
+                  {row.status === 'published' ? 'Unpublish' : 'Publish'}
+                </button>
+              </form>
+              <form method="POST">
+                <input type="hidden" name="action" value="delete" />
+                <input type="hidden" name="id" value={row.id} />
+                <button type="submit" class="btn-admin secondary small">
+                  Delete
+                </button>
+              </form>
+            </div>
+          )}
+        </div>
+      ))
+    }
+  </div>
+</AdminLayout>
+
+<style>
+  .forms-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0 18px;
+  }
+
+  .checkline {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+  }
+
+  .checkline input {
+    width: 18px;
+    height: 18px;
+  }
+
+  .fr-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  .fr-num {
+    margin-left: 10px;
+    font-size: 0.8rem;
+    color: var(--accent);
+  }
+
+  .fr-status {
+    margin-left: 10px;
+    font-family: var(--font-heading);
+    font-size: 0.58rem;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text-faint);
+  }
+
+  .fr-status.is-published {
+    color: var(--status-ok-text);
+  }
+
+  .fr-opt {
+    margin-left: 8px;
+    font-size: 0.72rem;
+    color: var(--text-faint);
+  }
+
+  .fr-meta {
+    margin-top: 4px;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+  }
+
+  .fr-stale {
+    color: var(--status-warn-text, #d0a45a);
+  }
+
+  .fr-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .btn-admin.small {
+    padding: 6px 10px;
+    font-size: 0.62rem;
+  }
+</style>

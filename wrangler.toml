@@ -23,6 +23,23 @@ assets = { directory = "./dist", binding = "ASSETS" }
 [vars]
 PUBLIC_SITE_URL = "https://devinjordansecuritytrainingacademy.com"
 
+# Invitation email. The sending domain is devinjordansecurity.com because that
+# is the one verified in Resend; the academy domain sends nothing. Every Resend
+# DNS record lives on a subdomain (send., resend._domainkey, rsend), so the root
+# SPF that Microsoft 365 depends on is untouched.
+#
+# EMAIL_REPLY_TO matters more than it looks: the From address is unattended, and
+# an invite is exactly the mail people answer with a question. Point it at a
+# mailbox somebody reads.
+EMAIL_FROM = "Devin Jordan Security Training Academy <invites@devinjordansecurity.com>"
+EMAIL_REPLY_TO = "info@devinjordansecurity.com"
+
+# RESEND_API_KEY is a secret, not a var. It can send mail AS the academy, and a
+# leaked sending key is how a domain lands on a blocklist with its ordinary
+# business mail stuck behind it:
+#
+#   npx wrangler secret put RESEND_API_KEY
+
 # The anon key is designed to be public — every Supabase browser app ships it —
 # and is protected by row level security, not by secrecy. Safe to commit.
 #
