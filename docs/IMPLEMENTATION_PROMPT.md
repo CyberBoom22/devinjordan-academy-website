@@ -103,6 +103,14 @@ Append two groups, matching the existing `PermissionDef` shape and the house com
    // user_permissions grant with a written reason, not by default and not by role.
 'certificate.void'   → owner, admin
 'certificate.resend' → owner, admin, instructor
+
+/* --- Packet documents (§9) ---------------------------------------------- */
+'document.manage'    → owner, admin
+   // Writes a new version of a waiver or agreement. New wording is a new version,
+   // never an edit, so this permission changes what future students sign and
+   // nothing about what past students already signed.
+'document.read'      → ALL_STAFF
+'instructor.notes'   → owner, admin      // Reading another instructor's confidential notes
 ```
 
 `certificate.issue` must be checked in **three** places: the RLS policy on `certificates`, the server-side handler before the transaction, and the button's visibility. The RLS policy is the boundary; the other two are UX.
@@ -317,6 +325,7 @@ src/pages/admin/training/courses/[id].astro   Course training settings (code, sc
 ```
 src/pages/session/[token].astro       Projector view — QR + live roster, read-only, no admin session (§2.5)
 src/pages/check-in/[token].astro      Student self check-in, mobile-first
+src/pages/intake/[token].astro        Pre-class packet: enrollment, screening, waivers (§9)
 src/pages/verify/[slug].astro         Public certificate verification
 src/pages/verify/index.astro          Enter a certificate number
 src/pages/me/index.astro              Student portal, Supabase magic link to the email on file
@@ -371,6 +380,7 @@ Signature via a `<canvas>` pad in `src/scripts/signature.ts` (external module �
 4. If `courses.requires_score`, `passed = true`.
 5. `courses.issues_certificate = true`.
 6. No existing `valid` certificate for that (student, session). Re-issue is an explicit supersede that voids the prior one with a reason.
+7. Required packet documents are signed and the eligibility screening is cleared (§9): `range_rules`, `liability_waiver` and `student_agreement` each have a `document_signatures` row for this student and session, and the enrollment is not `needs_instructor_review`.
 
 Never partially issue. If PDF generation or upload fails, roll back — a burned certificate number is a permanent gap in a credential series that somebody will have to explain in two years.
 
@@ -388,7 +398,7 @@ Allocate `app.next_record_number('certificate','DJSTA-CERT')` → snapshot names
 
   **Address the two-domain mismatch in the body copy.** The mail sends from `devinjordansecurity.com` (the domain verified in Resend) while the verification link points at `devinjordansecuritytrainingacademy.com` (the canonical site). This is intentional, but to a student it looks like the two halves of a phishing attempt. So the email must: name Devin Jordan Security Training Academy in full in the first line, state plainly that it was sent from `devinjordansecurity.com` and that certificates are verified at `devinjordansecuritytrainingacademy.com/verify`, and show the verify URL as visible text rather than a bare "click here". Same treatment in the plain-text part. A sender line that explains itself costs two sentences; a student who deletes their own certificate as spam costs a phone call and a reissue.
 
-- **Download** via signed URL from the certificates screen, plus "download all" for a session and a bulk "issue for all passing students" that still runs all six preconditions per student.
+- **Download** via signed URL from the certificates screen, plus "download all" for a session and a bulk "issue for all passing students" that still runs all seven preconditions per student.
 
 ### Verify and void
 
@@ -396,7 +406,135 @@ Allocate `app.next_record_number('certificate','DJSTA-CERT')` → snapshot names
 
 ---
 
-## 9. House style — match it or the diff will look foreign
+## 9. The student packet — what every PDF becomes
+
+### How the files get to you
+
+Do not paste these into a prompt. **Commit all of them to `docs/forms/` in the repo** and read them from disk as you reach each phase. They are the visual and legal source of truth for the screens you are building; a screen written from a description of a form will not match the form.
+
+```
+docs/forms/
+  00_Packet_Control_and_Completion_Checklist.pdf
+  01_Student_Identification_and_Contact_Information.pdf
+  02_Course_Enrollment_and_Prior_Training.pdf
+  03_Training_Eligibility_and_Safety_Screening.pdf
+  04_Firearm_Ammunition_and_Equipment_Record.pdf
+  05_Range_Safety_Rules_and_Student_Acknowledgment.pdf
+  06_Liability_Waiver_Assumption_of_Risk_and_Release.pdf
+  07_Student_Agreement_Conduct_Privacy_and_Media.pdf
+  08_Classroom_Use_of_Force_and_Practical_Attendance_Record.pdf
+  09_Live_Fire_Qualification_and_Skills_Evaluation.pdf
+  10_Target_and_Evidence_Control_Sheet.pdf
+  11_Official_NJSP_SP_182_Safe_Handling_and_Proficiency_Certification.pdf
+  12_Certification_Record_Closeout_and_Renewal_Index.pdf
+  13_Instructor_Confidential_Notes.pdf
+  14_Automation_and_Searchable_Record_Data_Dictionary.pdf
+  DJSTA_Certificate_of_Completion_TEMPLATE.pdf
+  DJSTA_Classroom_Attendance_Roster.pdf
+```
+
+Read each one before building its screen. Extract the exact field labels, the exact order, and the exact wording of anything a student signs. **Never paraphrase legal text.** If a field in the PDF has no home in the schema below, add a column rather than dropping the field — the packet is the record-retention artifact and a missing field is a gap in a permanent record.
+
+Two of these are also runtime inputs, not just references, and must additionally be uploaded to the private `pdf-templates` Supabase bucket (the Worker cannot read the repo at runtime): `DJSTA_Certificate_of_Completion_TEMPLATE.pdf`, and the `DJSTA-STD-003_roster_template.pdf` you generate from `DJSTA_Classroom_Attendance_Roster.pdf`.
+
+### The map
+
+| #   | Form                                           | Becomes                                                                        | Who fills it                                          | Where                                    |
+| --- | ---------------------------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------- | ---------------------------------------- |
+| 00  | Packet Control & Completion Checklist          | **Derived, not a form.** A live progress panel computed from the other records | nobody — the system                                   | `admin/training/students/[id]`           |
+| 01  | Student Identification & Contact               | `public.students`                                                              | student at check-in                                   | `/check-in/[token]` (already in Phase 3) |
+| 02  | Course Enrollment & Prior Training             | `student_enrollments`                                                          | student, pre-class                                    | `/intake/[token]`                        |
+| 03  | Training Eligibility & Safety Screening        | `eligibility_screenings`                                                       | student answers, **instructor reviews and signs off** | `/intake/[token]` + admin review         |
+| 04  | Firearm, Ammunition & Equipment Record         | `session_equipment_records`                                                    | instructor at the range                               | `admin/training/sessions/[id]`           |
+| 05  | Range Safety Rules & Acknowledgment            | signed document, template key `range_rules`                                    | student e-signs                                       | `/intake/[token]`                        |
+| 06  | Liability Waiver & Assumption of Risk          | signed document, key `liability_waiver`                                        | student e-signs                                       | `/intake/[token]`                        |
+| 07  | Student Agreement, Conduct, Privacy & Media    | signed document, key `student_agreement`                                       | student e-signs                                       | `/intake/[token]`                        |
+| 08  | Classroom & Use-of-Force Attendance            | DJSTA-STD-003 roster                                                           | students scan, instructor certifies                   | already built, Phases 3–4                |
+| 09  | Live-Fire Qualification & Skills Evaluation    | `session_checkins.score/passed` + `qualification_details`                      | instructor                                            | `admin/training/sessions/[id]`           |
+| 10  | Target & Evidence Control Sheet                | `session_evidence` + photo upload                                              | instructor                                            | `admin/training/sessions/[id]`           |
+| 11  | Official NJSP S.P. 182                         | **Link out only — see below**                                                  | —                                                     | reference link, no screen                |
+| 12  | Certification, Record Closeout & Renewal Index | `public.certificates` + renewal dates                                          | system on issue                                       | already built, Phase 5                   |
+| 13  | Instructor Confidential Notes                  | `instructor_notes`, restricted                                                 | instructor                                            | `admin/training/sessions/[id]`, gated    |
+| 14  | Automation & Searchable Record Data Dictionary | **Specification, not a screen.** Reconcile your column names against it        | —                                                     | inform the schema                        |
+
+### 11 — the NJSP form is the one you do not build
+
+`DJSTA_Classroom_Attendance_Roster.pdf` is DJSTA's own form and you may reproduce it. **S.P. 182 is a New Jersey State Police form and you must not regenerate, restyle, re-typeset or pre-fill it.** A recreated government form that looks official and is a revision behind is worse than no form at all — this is exactly the reasoning already written into `0010_required_forms.sql`, which is why `required_forms.source_url` is `NOT NULL` and the academy hosts no copies.
+
+So: add S.P. 182 as a row in the existing `required_forms` table pointing at the NJSP page, and on the student's record show a checkbox — _"S.P. 182 completed"_ with a completion date and the completing instructor. The packet itself says this form is completed **only after successful qualification**, so gate that checkbox on a passing score and surface it as an outstanding item until it is ticked.
+
+### The documents engine — `supabase/migrations/0014_packet_documents.sql`
+
+Forms 05, 06 and 07 are signed agreements, and signed agreements have one requirement that ordinary form data does not: **you must be able to prove what the person actually agreed to, years later, after the wording has changed.** Storing a `waiver_signed: true` boolean is worthless in a dispute. So store the version and a frozen copy of the exact text presented.
+
+```sql
+create table public.document_templates (
+  id uuid primary key default uuid_generate_v4(),
+  key text not null check (key ~ '^[a-z][a-z0-9_]{1,40}$'),  -- range_rules, liability_waiver, student_agreement
+  version integer not null,
+  title text not null,
+  body_markdown text not null,
+  requires_guardian_under_18 boolean not null default false,
+  effective_from timestamptz not null default now(),
+  retired_at timestamptz,
+  created_by uuid references public.profiles (id),
+  created_at timestamptz not null default now(),
+  unique (key, version)
+);
+-- A template row is never edited after anything has been signed against it.
+-- Changing the wording means a NEW version, so every historical signature keeps
+-- pointing at the words that were on the screen that day.
+
+create table public.document_signatures (
+  id uuid primary key default uuid_generate_v4(),
+  template_id uuid not null references public.document_templates (id),
+  student_id uuid not null references public.students (id),
+  session_id uuid references public.course_sessions (id),
+  -- The full text as rendered to this person, copied at signing time. Redundant
+  -- with the template on purpose: it is the only thing that survives a template
+  -- being retired, re-keyed or migrated.
+  body_snapshot text not null,
+  signature_path text not null,          -- PNG in the `signatures` bucket
+  signed_name text not null,
+  is_minor boolean not null default false,
+  guardian_name text, guardian_signature_path text, guardian_relationship text,
+  signed_at timestamptz not null default now(),
+  ip inet, user_agent text,
+  witness_profile_id uuid references public.profiles (id),
+  created_at timestamptz not null default now(),
+  unique (student_id, template_id, session_id)
+);
+-- No update policy and no delete policy. A signature is corrected by superseding
+-- it with a new one, never by editing the old.
+```
+
+Form 06 has an explicit 18-or-over / under-18 branch with a parent or guardian signature block. Honour it: if `dob` makes the student a minor at the session date, the guardian fields become required and the student cannot complete intake without them.
+
+Form 07 bundles conduct, privacy **and media release**. Media consent must be a **separate, independently revocable opt-in checkbox** (`students.media_consent`, with a date), not folded into the agreement signature. Someone agreeing to a code of conduct has not thereby agreed to appear in marketing photographs, and a revocation needs somewhere to land.
+
+### `/intake/[token]` — the pre-class student flow
+
+One tokenised link per student per session, emailed on enrollment and also reachable from the check-in confirmation screen so a walk-in can complete it on the spot. Same CSRF-on-a-public-path treatment as `/check-in` (§2.4), same rate limiting, same "never render a full record to an unauthenticated visitor" rule.
+
+Progressive, one section per screen, save-as-you-go so a dropped signal does not lose the lot: enrollment and prior training (02) → eligibility screening (03) → range rules (05) → waiver (06) → student agreement and media opt-in (07) → done. Show a progress indicator; let them resume where they stopped.
+
+**Form 03 is the delicate one.** It asks eligibility questions with legal consequences — the kind of thing where a wrong answer costs someone a permit rather than an afternoon. Present the questions in the packet's exact wording, add no interpretation or guidance of your own, and make clear on the screen that answers are reviewed by an instructor. Answers are visible only to `student.read` holders, never on the projector, never in an email. An answer that flags for review sets the enrollment to `needs_instructor_review` and blocks certificate issuance until an instructor clears it — add that as precondition 7 in §8.
+
+### The packet checklist (form 00), computed
+
+Render it on the student record as a live checklist, each item ticked by evidence rather than by hand:
+
+identity verified (instructor confirms photo ID) · profile complete (01) · emergency contact present (01) · eligibility screening reviewed (03, instructor signed) · range rules signed (05) · waiver signed (06) · agreement signed (07) · equipment recorded (04) · classroom attendance certified (08) · qualification score recorded (09) · S.P. 182 completed (11, manual tick) · target/evidence retained (10) · certificate issued (12)
+
+Two of these stay manual because no system can observe them — identity verified against photo ID, and S.P. 182 completed. Both record who ticked them and when. Everything else derives from a record and must never be tickable by hand, or the checklist becomes a second, disagreeing source of truth.
+
+### Retention
+
+Signed documents, certified rosters and certificates are **permanent** and have no delete path anywhere in the UI or the policies. Form 13 (instructor confidential notes) is the exception in the other direction: readable only by its author and by `owner`/`admin` via a new `instructor.notes` permission, never exported, never included in a student-facing view, and clearly labelled in the UI as part of the training record rather than a private space.
+
+---
+
+## 10. House style — match it or the diff will look foreign
 
 - Every file opens with a block comment explaining **why** the thing is shaped that way, not what the code does. Read `src/lib/csrf.ts` and `0010_required_forms.sql` for the register: plain English, the failure being prevented, and the tradeoff taken. This is the most distinctive thing about the codebase.
 - Admin pages POST to themselves with an `action` field and set a `notice: { kind, message }` — copy `admin/forms.astro`.
@@ -407,18 +545,20 @@ Allocate `app.next_record_number('certificate','DJSTA-CERT')` → snapshot names
 
 ---
 
-## 10. Build order — stop after each phase and tell me what to click
+## 11. Build order — stop after each phase and tell me what to click
 
 1. **Migrations + permissions.** `0012`, `0013`, permission registry, `db:permissions`, `db:types`, storage buckets. Prove with a test that an anon client reads zero rows from `students` and `session_checkins`.
 2. **Course training settings + session CRUD + auto-titling.** Admin list/detail/new.
 3. **CSRF refactor (§2.4), QR generation, `/session/[token]` projector view, `/check-in/[token]`** both paths, live roster.
 4. **Verify/reject, time-out, scores, signature pad, certify, DJSTA-STD-003 roster PDF.**
 5. **Certificate issue + `pdf-lib` + storage + Resend attachment + download + `/verify` + void.**
-6. **`/me` student portal, bulk issue, training dashboard, audit filtering.**
+6. **Packet documents (§9).** `0014`, the versioned template/signature engine, `/intake/[token]`, forms 02/03/05/06/07, guardian branch, media opt-in.
+7. **Instructor range records.** Forms 04, 09, 10, 13 on the session screen; the computed packet checklist (form 00) on the student record; S.P. 182 as a `required_forms` row plus a manual tick.
+8. **`/me` student portal, bulk issue, training dashboard, audit filtering.**
 
 ---
 
-## 11. Definition of done
+## 12. Definition of done
 
 - [ ] `npm run verify` passes
 - [ ] An instructor creates a CPR class for next Saturday and the title generates correctly
@@ -429,16 +569,13 @@ Allocate `app.next_record_number('certificate','DJSTA-CERT')` → snapshot names
 - [ ] An instructor without `certificate.issue` gets a clear refusal; granting it via `user_permissions` with a reason makes the same button work, with no deploy
 - [ ] The issued PDF matches the template with a correctly fitted long name, the student receives it, staff can download it, `/verify/{slug}` shows it valid
 - [ ] Voiding flips the verify page and leaves row and PDF intact
+- [ ] A student completes `/intake` on a phone, signs all three documents, and the signatures store a frozen copy of the exact wording shown
+- [ ] Publishing a new waiver version leaves every previously signed record pointing at the old text
+- [ ] A student whose DOB makes them a minor cannot finish intake without guardian signature fields
+- [ ] Media consent can be revoked without touching the student agreement signature
+- [ ] Certificate issuance is blocked while a packet document is missing or a screening is unreviewed, with a message naming which
+- [ ] S.P. 182 appears as a link to the NJSP page and nowhere as a regenerated form
 - [ ] Every issue, void and certify appears in `audit_log` with the actor
 - [ ] Nothing in the production bundle violates `script-src 'self'` (check the deployed console for CSP errors)
 
 ---
-
-## 12. Uploads needed before Phase 5
-
-Put these in `docs/forms/` and tell Claude Code they are there:
-
-- `DJSTA_Certificate_of_Completion_TEMPLATE.pdf`
-- `DJSTA_Classroom_Attendance_Roster.pdf` (form DJSTA-STD-003)
-
-_Not legal advice — have DJSTA's NJ counsel review the retention, consent and privacy-notice wording before go-live._
