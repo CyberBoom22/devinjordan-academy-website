@@ -14,15 +14,36 @@
  * The token is minted on GET, kept in a cookie and echoed in a hidden field.
  * Only a page on this origin can read the cookie back, so only a form this
  * site rendered can present a matching pair.
+ *
+ * WHY THE SCOPE IS A PARAMETER
+ * ----------------------------
+ * A cookie set with `path=/admin` is never sent to `/contact`, so a single
+ * scope cannot protect both the sign-in form and a public enquiry form — the
+ * public form would read back an empty cookie and reject every honest
+ * submission. Widening the existing cookie to `/` would be the easy fix and
+ * the wrong one: the admin token would then ride along on every public
+ * request, including ones served to visitors who will never sign in.
+ *
+ * So each scope gets its own cookie at its own path. They are independent —
+ * a token minted for the public form cannot satisfy the admin check, which is
+ * the point.
  */
 
 import type { AstroCookies } from 'astro';
 
-const COOKIE = 'dj_form_csrf';
-const SHAPE = /^[0-9a-f]{64}$/;
+/**
+ * Where a form lives, which is also the cookie's path. Adding a scope means
+ * adding a route that posts while signed out; there is no reason to invent one
+ * otherwise.
+ */
+export type CsrfScope = '/admin' | '/contact';
 
-/** Scoped to /admin: no public page posts anything, so nothing else needs it. */
-const PATH = '/admin';
+const COOKIES: Record<CsrfScope, string> = {
+  '/admin': 'dj_form_csrf',
+  '/contact': 'dj_public_csrf',
+};
+
+const SHAPE = /^[0-9a-f]{64}$/;
 
 export function mintCsrfToken(): string {
   const bytes = new Uint8Array(32);
@@ -38,9 +59,13 @@ export function tokensMatch(a: string, b: string): boolean {
   return diff === 0;
 }
 
-/** Does the submitted field match the cookie this browser was given? */
-export function csrfValid(cookies: AstroCookies, submitted: FormDataEntryValue | null): boolean {
-  return tokensMatch(cookies.get(COOKIE)?.value ?? '', String(submitted ?? ''));
+/** Does the submitted field match the cookie this browser was given for this scope? */
+export function csrfValid(
+  cookies: AstroCookies,
+  submitted: FormDataEntryValue | null,
+  scope: CsrfScope,
+): boolean {
+  return tokensMatch(cookies.get(COOKIES[scope])?.value ?? '', String(submitted ?? ''));
 }
 
 /**
@@ -50,12 +75,13 @@ export function csrfValid(cookies: AstroCookies, submitted: FormDataEntryValue |
  * invalidates the form in any other tab the visitor already has open, and the
  * value is unguessable either way.
  */
-export function issueCsrfToken(cookies: AstroCookies, url: URL): string {
-  const existing = cookies.get(COOKIE)?.value;
+export function issueCsrfToken(cookies: AstroCookies, url: URL, scope: CsrfScope): string {
+  const name = COOKIES[scope];
+  const existing = cookies.get(name)?.value;
   const token = existing && SHAPE.test(existing) ? existing : mintCsrfToken();
 
-  cookies.set(COOKIE, token, {
-    path: PATH,
+  cookies.set(name, token, {
+    path: scope,
     httpOnly: true,
     sameSite: 'lax',
     secure: url.protocol === 'https:',
@@ -66,6 +92,6 @@ export function issueCsrfToken(cookies: AstroCookies, url: URL): string {
 }
 
 /** Called once the form has served its purpose, so a stale one cannot be replayed. */
-export function clearCsrfToken(cookies: AstroCookies): void {
-  cookies.delete(COOKIE, { path: PATH });
+export function clearCsrfToken(cookies: AstroCookies, scope: CsrfScope): void {
+  cookies.delete(COOKIES[scope], { path: scope });
 }

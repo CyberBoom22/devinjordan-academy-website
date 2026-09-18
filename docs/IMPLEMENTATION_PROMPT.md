@@ -28,7 +28,7 @@ Do not invent parallel systems. Everything below is already built and must be re
 | Supabase clients                   | `src/lib/supabase/server.ts`, `browser.ts`, `env.ts`                                 | `Astro.locals.supabase` is already request-scoped                                                              |
 | Generated DB types                 | `src/lib/supabase/database.types.ts`                                                 | Regenerate with `npm run db:types` after each migration                                                        |
 
-Last migration is `0011_invite_delivery.sql`. **New migrations start at `0012`.**
+Last migration is `0012_enquiry_intake.sql`. **New migrations start at `0013`.**
 
 Before Phase 1, print a one-page summary of: the `courses` table columns, the RLS policy style used in `0002_content.sql`, and the POST-handling pattern in `src/pages/admin/forms.astro`. Then follow those patterns exactly.
 
@@ -81,7 +81,7 @@ Instructors who will run sessions need TOTP enrolled before their first class. A
 
 ## 3. Permissions to add — `src/lib/auth/permissions.ts`
 
-Append two groups, matching the existing `PermissionDef` shape and the house commenting style. Then run `npm run db:permissions` and paste its output into `0012`.
+Append two groups, matching the existing `PermissionDef` shape and the house commenting style. Then run `npm run db:permissions` and paste its output into `0013`.
 
 ```
 /* --- Training sessions -------------------------------------------------- */
@@ -119,7 +119,7 @@ Append two groups, matching the existing `PermissionDef` shape and the house com
 
 ## 4. Migrations
 
-### `supabase/migrations/0012_training_records.sql`
+### `supabase/migrations/0013_training_records.sql`
 
 Follow the file-header comment convention of `0010_required_forms.sql`: explain _why_ the schema insists on what it insists on.
 
@@ -241,7 +241,7 @@ create policy "students writable with permission" on public.students
 
 **Anonymous check-in cannot go through RLS.** The public check-in handler runs server-side with the service role key (already a Worker secret) and does its own validation: valid unexpired token, within the window, one row per student per session. Keep that handler in `src/lib/checkin/` and never import it into anything that ships to the browser. `anon` gets **no** policy on `students` or `session_checkins` — verify this with a test.
 
-### `supabase/migrations/0013_certificates.sql`
+### `supabase/migrations/0014_certificates.sql`
 
 ```sql
 create type public.certificate_status as enum ('valid','void','superseded');
@@ -463,7 +463,7 @@ Two of these are also runtime inputs, not just references, and must additionally
 
 So: add S.P. 182 as a row in the existing `required_forms` table pointing at the NJSP page, and on the student's record show a checkbox — _"S.P. 182 completed"_ with a completion date and the completing instructor. The packet itself says this form is completed **only after successful qualification**, so gate that checkbox on a passing score and surface it as an outstanding item until it is ticked.
 
-### The documents engine — `supabase/migrations/0014_packet_documents.sql`
+### The documents engine — `supabase/migrations/0015_packet_documents.sql`
 
 Forms 05, 06 and 07 are signed agreements, and signed agreements have one requirement that ordinary form data does not: **you must be able to prove what the person actually agreed to, years later, after the wording has changed.** Storing a `waiver_signed: true` boolean is worthless in a dispute. So store the version and a frozen copy of the exact text presented.
 
@@ -547,12 +547,12 @@ Signed documents, certified rosters and certificates are **permanent** and have 
 
 ## 11. Build order — stop after each phase and tell me what to click
 
-1. **Migrations + permissions.** `0012`, `0013`, permission registry, `db:permissions`, `db:types`, storage buckets. Prove with a test that an anon client reads zero rows from `students` and `session_checkins`.
+1. **Migrations + permissions.** `0013`, `0014`, permission registry, `db:permissions`, `db:types`, storage buckets. Prove with a test that an anon client reads zero rows from `students` and `session_checkins`.
 2. **Course training settings + session CRUD + auto-titling.** Admin list/detail/new.
 3. **CSRF refactor (§2.4), QR generation, `/session/[token]` projector view, `/check-in/[token]`** both paths, live roster.
 4. **Verify/reject, time-out, scores, signature pad, certify, DJSTA-STD-003 roster PDF.**
 5. **Certificate issue + `pdf-lib` + storage + Resend attachment + download + `/verify` + void.**
-6. **Packet documents (§9).** `0014`, the versioned template/signature engine, `/intake/[token]`, forms 02/03/05/06/07, guardian branch, media opt-in.
+6. **Packet documents (§9).** `0015`, the versioned template/signature engine, `/intake/[token]`, forms 02/03/05/06/07, guardian branch, media opt-in.
 7. **Instructor range records.** Forms 04, 09, 10, 13 on the session screen; the computed packet checklist (form 00) on the student record; S.P. 182 as a `required_forms` row plus a manual tick.
 8. **`/me` student portal, bulk issue, training dashboard, audit filtering.**
 
