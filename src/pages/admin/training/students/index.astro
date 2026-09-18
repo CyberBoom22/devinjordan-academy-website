@@ -1,0 +1,524 @@
+---
+/**
+ * The student register.
+ *
+ * Search, and registration. Both are here rather than on separate screens
+ * because they are the same task interrupted: before you add somebody you look
+ * for them, and the moment you fail to find them is the moment you want the
+ * form. Splitting them is how a second record gets created for a student who
+ * was already in the system under a married name.
+ *
+ * THE NUMBER IS NOT A FIELD
+ * -------------------------
+ * There is no input for the permanent student number, and adding one would be
+ * a bug. It is assigned by a database trigger on insert, which overwrites
+ * anything sent, so no form, no bug and no crafted request can choose or
+ * duplicate a number. See 0013_students.sql for why that is a trigger rather
+ * than a default.
+ *
+ * SEARCH DELIBERATELY OVER-MATCHES
+ * --------------------------------
+ * A search that returns four people costs a glance. A search that returns
+ * nothing costs a duplicate record and a second permanent number for somebody
+ * who already had one — the exact failure the register exists to prevent. So a
+ * surname matches on prefix, and a date of birth is searched on its own rather
+ * than required alongside a name.
+ */
+import AdminLayout from '../../../../layouts/AdminLayout.astro';
+import { can } from '../../../../lib/auth/session';
+
+const { supabase, session } = Astro.locals;
+
+if (!can(session, 'student.read')) {
+  return Astro.redirect('/admin?error=forbidden', 303);
+}
+
+const mayWrite = can(session, 'student.write');
+
+type StudentRow = {
+  id: string;
+  djsta_student_no: string;
+  legal_first: string;
+  legal_middle: string | null;
+  legal_last: string;
+  dob: string;
+  email: string;
+  phone: string | null;
+  city: string | null;
+  state: string | null;
+  merged_into: string | null;
+  created_at: string;
+};
+
+let notice: { kind: 'success' | 'error'; message: string } | null = null;
+/** Held so the form comes back filled in when a field was missed. */
+let draft: Record<string, string> = {};
+
+/** Trim and collapse whitespace; null when nothing is left. */
+function clean(value: unknown, max: number): string | null {
+  const text = String(value ?? '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return text ? text.slice(0, max) : null;
+}
+
+/** A date the database will accept, or null. Rejects the impossible ones. */
+function cleanDate(value: unknown): string | null {
+  const text = String(value ?? '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return null;
+  const parsed = new Date(`${text}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  // A student born tomorrow is a typo, not a student.
+  if (parsed.getTime() > Date.now()) return null;
+  return text;
+}
+
+if (Astro.request.method === 'POST' && supabase && mayWrite) {
+  const form = await Astro.request.formData();
+
+  if (String(form.get('action') ?? '') === 'add') {
+    draft = Object.fromEntries(
+      ['first', 'middle', 'last', 'dob', 'email', 'phone', 'city', 'state', 'zip', 'line1'].map(
+        (key) => [key, String(form.get(key) ?? '')],
+      ),
+    );
+
+    const first = clean(form.get('first'), 80);
+    const last = clean(form.get('last'), 80);
+    const dob = cleanDate(form.get('dob'));
+    const email = clean(form.get('email'), 200)?.toLowerCase() ?? null;
+
+    if (!first || !last) {
+      notice = { kind: 'error', message: 'A legal first and last name are both required.' };
+    } else if (!dob) {
+      notice = { kind: 'error', message: 'A valid date of birth is required.' };
+    } else if (!email) {
+      notice = {
+        kind: 'error',
+        message: 'An email address is required — it is how the certificate reaches them.',
+      };
+    } else {
+      // djsta_student_no is deliberately absent. The trigger assigns it.
+      const { data, error } = await supabase
+        .from('students')
+        .insert({
+          legal_first: first,
+          legal_middle: clean(form.get('middle'), 80),
+          legal_last: last,
+          dob,
+          email,
+          phone: clean(form.get('phone'), 40),
+          address_line1: clean(form.get('line1'), 200),
+          city: clean(form.get('city'), 80),
+          state: clean(form.get('state'), 2)?.toUpperCase() ?? null,
+          zip: clean(form.get('zip'), 10),
+          created_by: session.user?.id,
+        })
+        .select('djsta_student_no, legal_first, legal_last')
+        .single();
+
+      if (error) {
+        notice = { kind: 'error', message: error.message };
+      } else {
+        notice = {
+          kind: 'success',
+          message: `${data.legal_first} ${data.legal_last} registered as ${data.djsta_student_no}. That number is theirs permanently.`,
+        };
+        draft = {};
+      }
+    }
+  }
+}
+
+const query = clean(Astro.url.searchParams.get('q'), 120) ?? '';
+const dobQuery = cleanDate(Astro.url.searchParams.get('dob'));
+
+let results: StudentRow[] = [];
+let searched = false;
+let total = 0;
+
+if (supabase) {
+  const { count } = await supabase.from('students').select('id', { count: 'exact', head: true });
+  total = count ?? 0;
+
+  if (query || dobQuery) {
+    searched = true;
+    let builder = supabase.from('students').select('*');
+
+    if (query) {
+      // PostgREST `or` takes a comma-separated filter list. Commas inside the
+      // value would split it, so they are stripped above by clean() collapsing
+      // whitespace — and escaped here for the wildcard forms.
+      const safe = query.replace(/[,()*]/g, ' ').trim();
+      if (safe) {
+        builder = builder.or(
+          [
+            `legal_last.ilike.${safe}%`,
+            `legal_first.ilike.${safe}%`,
+            `email.ilike.%${safe}%`,
+            `djsta_student_no.ilike.%${safe}%`,
+          ].join(','),
+        );
+      }
+    }
+
+    if (dobQuery) builder = builder.eq('dob', dobQuery);
+
+    const { data } = await builder.order('legal_last').limit(50);
+    results = (data ?? []) as unknown as StudentRow[];
+  }
+}
+
+function age(dob: string): number {
+  const born = new Date(`${dob}T00:00:00Z`);
+  const now = new Date();
+  let years = now.getUTCFullYear() - born.getUTCFullYear();
+  const monthDiff = now.getUTCMonth() - born.getUTCMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && now.getUTCDate() < born.getUTCDate())) years -= 1;
+  return years;
+}
+
+function shortDate(value: string): string {
+  return new Date(`${value}T00:00:00Z`).toLocaleDateString('en-US', {
+    timeZone: 'UTC',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+---
+
+<AdminLayout title="Students">
+  <div class="admin-head">
+    <h1>Students</h1>
+    <p>
+      The permanent register. One record per person, reused for every course they ever take — {
+        total
+      }
+      {total === 1 ? 'student' : 'students'} on file. Always search before you register somebody: a second
+      record means a second permanent number for a person who already had one.
+    </p>
+  </div>
+
+  {notice && <div class:list={['notice', notice.kind]}>{notice.message}</div>}
+
+  <section class="panel">
+    <h2>Find a student</h2>
+    <form class="search" method="GET">
+      <label class="field">
+        <span>Name, student number or email</span>
+        <input
+          type="search"
+          name="q"
+          value={query}
+          placeholder="e.g. Delgado, or DJSTA-2026-000042"
+        />
+      </label>
+      <label class="field narrow">
+        <span>Date of birth</span>
+        <input type="date" name="dob" value={dobQuery ?? ''} />
+      </label>
+      <button type="submit">Search</button>
+      {
+        (query || dobQuery) && (
+          <a class="clear" href="/admin/training/students">
+            Clear
+          </a>
+        )
+      }
+    </form>
+
+    {
+      searched && results.length === 0 && (
+        <p class="empty">
+          Nobody matches that. Check a married or former name before registering them as new — a
+          duplicate cannot be undone, only merged.
+        </p>
+      )
+    }
+
+    {
+      results.length > 0 && (
+        <table class="results">
+          <thead>
+            <tr>
+              <th>Student no.</th>
+              <th>Name</th>
+              <th>Date of birth</th>
+              <th>Contact</th>
+            </tr>
+          </thead>
+          <tbody>
+            {results.map((row) => (
+              <tr class:list={[row.merged_into && 'merged']}>
+                <td class="mono">{row.djsta_student_no}</td>
+                <td>
+                  {row.legal_last}, {row.legal_first}
+                  {row.legal_middle && ` ${row.legal_middle}`}
+                  {row.merged_into && <span class="tag">merged</span>}
+                </td>
+                <td>
+                  {shortDate(row.dob)} <span class="muted">· {age(row.dob)}</span>
+                </td>
+                <td>
+                  <a href={`mailto:${row.email}`}>{row.email}</a>
+                  {row.phone && <span class="muted"> · {row.phone}</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )
+    }
+  </section>
+
+  {
+    mayWrite && (
+      <section class="panel">
+        <h2>Register a student</h2>
+        <p class="lede">
+          The permanent number is assigned by the database when the record is created. There is no
+          field for it, and it can never be edited afterwards.
+        </p>
+
+        <form method="POST" class="add">
+          <input type="hidden" name="action" value="add" />
+
+          <div class="row three">
+            <label class="field">
+              <span>
+                Legal first <b>*</b>
+              </span>
+              <input type="text" name="first" required maxlength="80" value={draft.first ?? ''} />
+            </label>
+            <label class="field">
+              <span>Middle</span>
+              <input type="text" name="middle" maxlength="80" value={draft.middle ?? ''} />
+            </label>
+            <label class="field">
+              <span>
+                Legal last <b>*</b>
+              </span>
+              <input type="text" name="last" required maxlength="80" value={draft.last ?? ''} />
+            </label>
+          </div>
+
+          <div class="row three">
+            <label class="field">
+              <span>
+                Date of birth <b>*</b>
+              </span>
+              <input type="date" name="dob" required value={draft.dob ?? ''} />
+            </label>
+            <label class="field">
+              <span>
+                Email <b>*</b>
+              </span>
+              <input type="email" name="email" required maxlength="200" value={draft.email ?? ''} />
+            </label>
+            <label class="field">
+              <span>Mobile</span>
+              <input type="tel" name="phone" maxlength="40" value={draft.phone ?? ''} />
+            </label>
+          </div>
+
+          <div class="row address">
+            <label class="field">
+              <span>Address</span>
+              <input type="text" name="line1" maxlength="200" value={draft.line1 ?? ''} />
+            </label>
+            <label class="field">
+              <span>City</span>
+              <input type="text" name="city" maxlength="80" value={draft.city ?? ''} />
+            </label>
+            <label class="field tiny">
+              <span>State</span>
+              <input type="text" name="state" maxlength="2" value={draft.state ?? ''} />
+            </label>
+            <label class="field tiny">
+              <span>ZIP</span>
+              <input type="text" name="zip" maxlength="10" value={draft.zip ?? ''} />
+            </label>
+          </div>
+
+          <button type="submit" class="primary">
+            Register student
+          </button>
+        </form>
+      </section>
+    )
+  }
+</AdminLayout>
+
+<style>
+  .panel {
+    background: var(--surface-1, #17171b);
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+    border-radius: 8px;
+    padding: 22px 24px 26px;
+    margin-bottom: 22px;
+  }
+
+  .panel h2 {
+    font-size: 0.78rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent, #c5a059);
+    margin: 0 0 16px;
+  }
+
+  .lede {
+    margin: -6px 0 18px;
+    font-size: 0.9rem;
+    color: var(--text-muted, #a1a1aa);
+  }
+
+  .search {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 12px;
+  }
+
+  .search .field {
+    flex: 1;
+    min-width: 240px;
+    margin: 0;
+  }
+
+  .search .narrow {
+    flex: 0 0 180px;
+    min-width: 160px;
+  }
+
+  .field {
+    display: block;
+    margin-bottom: 14px;
+  }
+
+  .field > span {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted, #a1a1aa);
+  }
+
+  .field b {
+    color: var(--primary, #9b1b1b);
+  }
+
+  .field input {
+    width: 100%;
+    padding: 10px 12px;
+    background: var(--surface-2, #101013);
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+    border-radius: 6px;
+    color: inherit;
+    font: inherit;
+  }
+
+  .row {
+    display: grid;
+    gap: 14px;
+  }
+
+  .row.three {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .row.address {
+    grid-template-columns: 2fr 1fr 80px 120px;
+  }
+
+  button {
+    padding: 11px 22px;
+    background: var(--surface-2, #101013);
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.16));
+    border-radius: 6px;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  button.primary {
+    margin-top: 6px;
+    background: var(--primary, #9b1b1b);
+    border-color: transparent;
+    color: #fff;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .clear {
+    color: var(--text-muted, #a1a1aa);
+    font-size: 0.85rem;
+    padding-bottom: 12px;
+  }
+
+  .results {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 18px;
+    font-size: 0.92rem;
+  }
+
+  .results th {
+    text-align: left;
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted, #a1a1aa);
+    padding: 0 10px 8px 0;
+    border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+  }
+
+  .results td {
+    padding: 10px 10px 10px 0;
+    border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.06));
+    vertical-align: top;
+  }
+
+  .results tr.merged {
+    opacity: 0.55;
+  }
+
+  .mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    white-space: nowrap;
+    color: var(--accent, #c5a059);
+  }
+
+  .tag {
+    margin-left: 8px;
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border: 1px solid currentColor;
+    border-radius: 999px;
+    padding: 1px 7px;
+    color: var(--text-muted, #a1a1aa);
+  }
+
+  .muted {
+    color: var(--text-muted, #a1a1aa);
+  }
+
+  .results a {
+    color: inherit;
+  }
+
+  .empty {
+    margin: 16px 0 0;
+    color: var(--text-muted, #a1a1aa);
+  }
+
+  @media (max-width: 760px) {
+    .row.three,
+    .row.address {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

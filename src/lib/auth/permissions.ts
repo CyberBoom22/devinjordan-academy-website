@@ -279,6 +279,29 @@ export const PERMISSIONS = {
     defaultRoles: ['owner'],
   },
 
+  /* --- Students ---------------------------------------------------------- */
+  'student.read': {
+    label: 'View student records',
+    group: 'Students',
+    description:
+      'Search the permanent student register and open a student’s record, including their date of birth and contact details.',
+    defaultRoles: ALL_STAFF,
+  },
+  'student.write': {
+    label: 'Add and edit students',
+    group: 'Students',
+    description:
+      'Register a new student and correct the details on an existing one. The permanent student number is assigned by the database and cannot be typed, chosen or changed by anyone.',
+    defaultRoles: ['owner', 'admin', 'instructor'],
+  },
+  'student.merge': {
+    label: 'Merge duplicate students',
+    group: 'Students',
+    description:
+      'Point one student record at another when the same person has been registered twice. Neither record is deleted, and neither number is ever reused.',
+    defaultRoles: ADMINS,
+  },
+
   /* --- Settings & audit -------------------------------------------------- */
   'settings.read': {
     label: 'View site settings',
