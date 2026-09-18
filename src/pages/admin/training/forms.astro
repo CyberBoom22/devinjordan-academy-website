@@ -1,0 +1,259 @@
+---
+/**
+ * The student record packet, as a catalogue.
+ *
+ * Seventeen documents, and the useful thing to know about each is not its name
+ * but who has to fill it in and what it turns into. An instructor looking at
+ * this list is asking "which of these is mine, and which am I waiting on the
+ * student for" — so the list is grouped by that rather than by number.
+ *
+ * Deliberately read-only. The catalogue is seeded from the PDFs in docs/forms
+ * by 0014, and a form appearing or changing is a migration, not an afternoon's
+ * editing: the wording of anything a student signs is reviewed before it ships,
+ * and an admin screen that let somebody retype a liability waiver would make
+ * that review meaningless.
+ *
+ * This is NOT /admin/forms. That screen lists required_forms — the state's
+ * paperwork, linked and never hosted. This one is the academy's own packet.
+ * Keeping them apart is the whole reason required_forms.source_url is NOT NULL.
+ */
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import { can } from '../../../lib/auth/session';
+
+const { supabase, session } = Astro.locals;
+
+if (!can(session, 'student.read')) {
+  return Astro.redirect('/admin?error=forbidden', 303);
+}
+
+type PacketForm = {
+  code: string;
+  sequence: number;
+  title: string;
+  purpose: string;
+  kind: string;
+  filled_by: string;
+  becomes: string | null;
+  source_file: string | null;
+  external_url: string | null;
+  requires_signature: boolean;
+  once_per_session: boolean;
+  active: boolean;
+};
+
+let forms: PacketForm[] = [];
+let loadError: string | null = null;
+
+if (supabase) {
+  const { data, error } = await supabase.from('packet_forms').select('*').order('sequence');
+  forms = (data ?? []) as unknown as PacketForm[];
+  loadError = error?.message ?? null;
+}
+
+const KIND_LABEL: Record<string, string> = {
+  record: 'Recorded',
+  signed_document: 'Signed',
+  derived: 'Computed',
+  external: 'State form',
+  specification: 'Reference',
+  output_template: 'Issued',
+};
+
+/**
+ * The three groups the office actually thinks in: what the student does, what
+ * the instructor does, and what the system produces without anybody touching
+ * it.
+ */
+const GROUPS = [
+  {
+    key: 'student',
+    heading: 'The student completes these',
+    note: 'Collected at intake or check-in. Anything signed here is signed against the exact wording that was on screen.',
+  },
+  {
+    key: 'instructor',
+    heading: 'The instructor completes these',
+    note: 'Filled in during the class or at the range. Never visible to the student.',
+  },
+  {
+    key: 'system',
+    heading: 'The system produces these',
+    note: 'Computed from the records above, or stamped and issued. Nothing to fill in.',
+  },
+] as const;
+---
+
+<AdminLayout title="Student record packet">
+  <div class="admin-head">
+    <h1>Student record packet</h1>
+    <p>
+      The seventeen documents that make up a DJSTA training record, and what each one becomes in the
+      system. Seeded from the source PDFs — this list is not editable here, because the wording of
+      anything a student signs is reviewed before it ships.
+    </p>
+  </div>
+
+  {loadError && <div class="notice error">{loadError}</div>}
+
+  {
+    !loadError && forms.length === 0 && (
+      <div class="notice error">
+        The packet catalogue is empty. Migration <code>0014_packet_forms.sql</code> has not been
+        applied to this database.
+      </div>
+    )
+  }
+
+  {
+    GROUPS.map((group) => {
+      const items = forms.filter((form) => form.filled_by === group.key);
+      if (items.length === 0) return null;
+      return (
+        <section class="panel">
+          <h2>{group.heading}</h2>
+          <p class="note">{group.note}</p>
+
+          {items.map((form) => (
+            <article class:list={['form-row', !form.active && 'inactive']}>
+              <div class="code">{form.code}</div>
+              <div class="body">
+                <h3>
+                  {form.title}
+                  <span class:list={['kind', form.kind]}>{KIND_LABEL[form.kind] ?? form.kind}</span>
+                  {form.requires_signature && <span class="kind sig">Signature</span>}
+                  {form.once_per_session && <span class="kind per">Per session</span>}
+                </h3>
+                <p class="purpose">{form.purpose}</p>
+                <p class="foot">
+                  {form.becomes && (
+                    <>
+                      Becomes <strong>{form.becomes}</strong>
+                    </>
+                  )}
+                  {form.source_file && <span class="file">{form.source_file}</span>}
+                  {form.external_url && (
+                    <a href={form.external_url} rel="noopener noreferrer" target="_blank">
+                      Open the agency’s page ↗
+                    </a>
+                  )}
+                </p>
+              </div>
+            </article>
+          ))}
+        </section>
+      );
+    })
+  }
+</AdminLayout>
+
+<style>
+  .panel {
+    margin-bottom: 26px;
+  }
+
+  .panel h2 {
+    font-size: 0.78rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent, #c5a059);
+    margin: 0 0 4px;
+  }
+
+  .note {
+    margin: 0 0 14px;
+    font-size: 0.88rem;
+    color: var(--text-muted, #a1a1aa);
+  }
+
+  .form-row {
+    display: grid;
+    grid-template-columns: 54px 1fr;
+    gap: 14px;
+    background: var(--surface-1, #17171b);
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+    border-radius: 8px;
+    padding: 16px 18px;
+    margin-bottom: 10px;
+  }
+
+  .form-row.inactive {
+    opacity: 0.5;
+  }
+
+  .code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 1.05rem;
+    color: var(--accent, #c5a059);
+    padding-top: 2px;
+    word-break: break-all;
+  }
+
+  .body h3 {
+    margin: 0 0 6px;
+    font-size: 1rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .kind {
+    font-size: 0.64rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.18));
+    color: var(--text-muted, #a1a1aa);
+    font-weight: 400;
+  }
+
+  .kind.signed_document,
+  .kind.sig {
+    color: var(--primary, #c85b5b);
+    border-color: currentColor;
+  }
+
+  .kind.external {
+    color: #60a5fa;
+    border-color: currentColor;
+  }
+
+  .purpose {
+    margin: 0;
+    font-size: 0.92rem;
+    line-height: 1.55;
+    color: var(--text, #e4e4e7);
+  }
+
+  .foot {
+    margin: 8px 0 0;
+    font-size: 0.8rem;
+    color: var(--text-muted, #a1a1aa);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+
+  .foot strong {
+    color: var(--text, #e4e4e7);
+    font-weight: 600;
+  }
+
+  .file {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.74rem;
+    opacity: 0.7;
+  }
+
+  .foot a {
+    color: #60a5fa;
+  }
+
+  @media (max-width: 620px) {
+    .form-row {
+      grid-template-columns: 1fr;
+      gap: 4px;
+    }
+  }
+</style>
