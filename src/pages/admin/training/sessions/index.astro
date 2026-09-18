@@ -1,0 +1,488 @@
+---
+/**
+ * Training sessions — the schedule, and the form that adds to it.
+ *
+ * A session is a class on a date. Creating one allocates three things the
+ * instructor never types: the course record id that goes on the paperwork, the
+ * check-in token that goes in the QR code, and the presenter token that opens
+ * the projector view. All three come from a database trigger, so no screen can
+ * choose or collide with one.
+ *
+ * THE TITLE IS GENERATED ONCE AND STORED
+ * --------------------------------------
+ * Built here from the course and the dates, then written to the row. It is not
+ * recomputed at render: a course renamed in 2028 must not retitle a class
+ * taught in 2026, least of all on a roster PDF already filed under the old
+ * name. Overriding it sets title_is_custom, which stops a later regeneration
+ * clobbering the override.
+ *
+ * THE CHECK-IN WINDOW DEFAULTS WIDER THAN THE CLASS
+ * -------------------------------------------------
+ * Opens thirty minutes before and closes an hour after. Students arrive early
+ * and phones fail late, and an instructor who has to reopen check-in for the
+ * person who was parking is an instructor doing admin in front of a room.
+ */
+import AdminLayout from '../../../../layouts/AdminLayout.astro';
+import { can } from '../../../../lib/auth/session';
+import { sessionTitle, sessionDate, sessionTime, sessionZone } from '../../../../lib/format';
+
+const { supabase, session } = Astro.locals;
+
+if (!can(session, 'session.read')) {
+  return Astro.redirect('/admin?error=forbidden', 303);
+}
+
+const mayWrite = can(session, 'session.write');
+
+type SessionRow = {
+  id: string;
+  title: string;
+  location: string;
+  starts_at: string;
+  ends_at: string;
+  course_record_id: string;
+  status: string;
+  checkin_opens_at: string;
+  checkin_closes_at: string;
+  courses: { name: string } | null;
+  instructors: { name: string } | null;
+};
+
+let notice: { kind: 'success' | 'error'; message: string } | null = null;
+let draft: Record<string, string> = {};
+
+/** A datetime-local value is wall-clock with no zone. Treat it as Eastern. */
+function easternToUtc(local: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(local)) return null;
+  // Resolve the offset in force on that date by asking Intl what the same
+  // instant looks like in New York, rather than hardcoding -04:00 and being
+  // an hour out for half the year.
+  const naive = new Date(`${local}:00Z`);
+  const shown = new Date(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/New_York',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    })
+      .format(naive)
+      .replace(/(\d+)\/(\d+)\/(\d+), (\d+):(\d+):(\d+)/, '$3-$1-$2T$4:$5:$6Z'),
+  );
+  const offset = naive.getTime() - shown.getTime();
+  return new Date(naive.getTime() + offset).toISOString();
+}
+
+if (Astro.request.method === 'POST' && supabase && mayWrite) {
+  const form = await Astro.request.formData();
+
+  if (String(form.get('action') ?? '') === 'create') {
+    draft = Object.fromEntries(
+      ['courseId', 'instructorId', 'location', 'startsAt', 'endsAt', 'title'].map((key) => [
+        key,
+        String(form.get(key) ?? ''),
+      ]),
+    );
+
+    const courseId = String(form.get('courseId') ?? '');
+    const location = String(form.get('location') ?? '').trim();
+    const startsAt = easternToUtc(String(form.get('startsAt') ?? ''));
+    const endsAt = easternToUtc(String(form.get('endsAt') ?? ''));
+    const customTitle = String(form.get('title') ?? '').trim();
+
+    if (!courseId) {
+      notice = { kind: 'error', message: 'Pick a course.' };
+    } else if (!location) {
+      notice = { kind: 'error', message: 'A location is required — it goes on the roster.' };
+    } else if (!startsAt || !endsAt) {
+      notice = { kind: 'error', message: 'Both a start and an end time are required.' };
+    } else if (new Date(endsAt) <= new Date(startsAt)) {
+      notice = { kind: 'error', message: 'The class has to end after it starts.' };
+    } else {
+      const { data: course } = await supabase
+        .from('courses')
+        .select('name')
+        .eq('id', courseId)
+        .single();
+
+      const courseName = (course as { name?: string } | null)?.name ?? 'Training session';
+      const generated = sessionTitle(courseName, startsAt, endsAt);
+
+      const opens = new Date(new Date(startsAt).getTime() - 30 * 60_000).toISOString();
+      const closes = new Date(new Date(endsAt).getTime() + 60 * 60_000).toISOString();
+
+      // course_record_id, checkin_token and presenter_token are deliberately
+      // absent: the trigger allocates all three.
+      const { error } = await supabase.from('course_sessions').insert({
+        course_id: courseId,
+        instructor_id: String(form.get('instructorId') ?? '') || null,
+        title: customTitle || generated,
+        title_is_custom: Boolean(customTitle),
+        location,
+        starts_at: startsAt,
+        ends_at: endsAt,
+        checkin_opens_at: opens,
+        checkin_closes_at: closes,
+        created_by: session.user?.id,
+      });
+
+      if (error) {
+        notice = { kind: 'error', message: error.message };
+      } else {
+        notice = { kind: 'success', message: `Scheduled — “${customTitle || generated}”.` };
+        draft = {};
+      }
+    }
+  }
+}
+
+let sessions: SessionRow[] = [];
+let courses: { id: string; name: string }[] = [];
+let instructors: { id: string; name: string }[] = [];
+let loadError: string | null = null;
+
+if (supabase) {
+  const [sessionRes, courseRes, instructorRes] = await Promise.all([
+    supabase
+      .from('course_sessions')
+      .select('*, courses(name), instructors(name)')
+      .order('starts_at', { ascending: false })
+      .limit(100),
+    supabase.from('courses').select('id, name').order('name'),
+    supabase.from('instructors').select('id, name').order('name'),
+  ]);
+
+  sessions = (sessionRes.data ?? []) as unknown as SessionRow[];
+  courses = (courseRes.data ?? []) as unknown as { id: string; name: string }[];
+  instructors = (instructorRes.data ?? []) as unknown as { id: string; name: string }[];
+  loadError = sessionRes.error?.message ?? null;
+}
+
+const now = Date.now();
+const upcoming = sessions.filter((row) => new Date(row.ends_at).getTime() >= now);
+const past = sessions.filter((row) => new Date(row.ends_at).getTime() < now);
+
+const STATUS_LABEL: Record<string, string> = {
+  draft: 'Draft',
+  open: 'Check-in open',
+  in_progress: 'In progress',
+  closed: 'Closed',
+  certified: 'Certified',
+};
+---
+
+<AdminLayout title="Training sessions">
+  <div class="admin-head">
+    <h1>Training sessions</h1>
+    <p>
+      Every class, and the roster behind it. Scheduling one allocates the course record number and
+      the check-in codes automatically — none of them are typed, and none can collide.
+    </p>
+  </div>
+
+  {notice && <div class:list={['notice', notice.kind]}>{notice.message}</div>}
+  {loadError && <div class="notice error">{loadError}</div>}
+
+  {
+    courses.length === 0 && (
+      <div class="notice error">
+        There are no courses yet, so there is nothing to schedule. Add one under Courses & tuition
+        first.
+      </div>
+    )
+  }
+
+  {
+    mayWrite && courses.length > 0 && (
+      <section class="panel">
+        <h2>Schedule a class</h2>
+        <form method="POST">
+          <input type="hidden" name="action" value="create" />
+
+          <div class="row two">
+            <label class="field">
+              <span>
+                Course <b>*</b>
+              </span>
+              <select name="courseId" required>
+                <option value="">Choose…</option>
+                {courses.map((course) => (
+                  <option value={course.id} selected={draft.courseId === course.id}>
+                    {course.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Instructor</span>
+              <select name="instructorId">
+                <option value="">Unassigned</option>
+                {instructors.map((instructor) => (
+                  <option value={instructor.id} selected={draft.instructorId === instructor.id}>
+                    {instructor.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div class="row two">
+            <label class="field">
+              <span>
+                Starts <b>*</b>
+              </span>
+              <input type="datetime-local" name="startsAt" required value={draft.startsAt ?? ''} />
+            </label>
+            <label class="field">
+              <span>
+                Ends <b>*</b>
+              </span>
+              <input type="datetime-local" name="endsAt" required value={draft.endsAt ?? ''} />
+            </label>
+          </div>
+
+          <label class="field">
+            <span>
+              Location <b>*</b>
+            </span>
+            <input
+              type="text"
+              name="location"
+              required
+              maxlength="200"
+              placeholder="Range or classroom address — this appears on the roster"
+              value={draft.location ?? ''}
+            />
+          </label>
+
+          <label class="field">
+            <span>Title override</span>
+            <input
+              type="text"
+              name="title"
+              maxlength="200"
+              placeholder="Leave blank to generate it from the course and date"
+              value={draft.title ?? ''}
+            />
+          </label>
+
+          <p class="hint">
+            Times are New Jersey local. Check-in opens 30 minutes before and closes an hour after —
+            students arrive early and phones fail late.
+          </p>
+
+          <button type="submit" class="primary">
+            Schedule
+          </button>
+        </form>
+      </section>
+    )
+  }
+
+  <section class="panel">
+    <h2>Upcoming · {upcoming.length}</h2>
+    {upcoming.length === 0 && <p class="empty">Nothing scheduled.</p>}
+    {
+      upcoming.map((row) => (
+        <article class="session">
+          <div class="when">
+            <strong>{sessionDate(row.starts_at)}</strong>
+            <span>
+              {sessionTime(row.starts_at)}–{sessionTime(row.ends_at)} {sessionZone(row.starts_at)}
+            </span>
+          </div>
+          <div class="what">
+            <h3>{row.title}</h3>
+            <p class="meta">
+              <span class="rec">{row.course_record_id}</span> · {row.location}
+              {row.instructors?.name && <> · {row.instructors.name}</>}
+            </p>
+          </div>
+          <span class:list={['pill', row.status]}>{STATUS_LABEL[row.status] ?? row.status}</span>
+        </article>
+      ))
+    }
+  </section>
+
+  {
+    past.length > 0 && (
+      <section class="panel muted">
+        <h2>Past · {past.length}</h2>
+        {past.slice(0, 25).map((row) => (
+          <article class="session">
+            <div class="when">
+              <strong>{sessionDate(row.starts_at)}</strong>
+            </div>
+            <div class="what">
+              <h3>{row.title}</h3>
+              <p class="meta">
+                <span class="rec">{row.course_record_id}</span> · {row.location}
+              </p>
+            </div>
+            <span class:list={['pill', row.status]}>{STATUS_LABEL[row.status] ?? row.status}</span>
+          </article>
+        ))}
+      </section>
+    )
+  }
+</AdminLayout>
+
+<style>
+  .panel {
+    background: var(--surface-1, #17171b);
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+    border-radius: 8px;
+    padding: 22px 24px 26px;
+    margin-bottom: 22px;
+  }
+
+  .panel.muted {
+    opacity: 0.75;
+  }
+
+  .panel h2 {
+    font-size: 0.78rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent, #c5a059);
+    margin: 0 0 16px;
+  }
+
+  .row {
+    display: grid;
+    gap: 14px;
+  }
+
+  .row.two {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .field {
+    display: block;
+    margin-bottom: 14px;
+  }
+
+  .field > span {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted, #a1a1aa);
+  }
+
+  .field b {
+    color: var(--primary, #9b1b1b);
+  }
+
+  .field input,
+  .field select {
+    width: 100%;
+    padding: 10px 12px;
+    background: var(--surface-2, #101013);
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+    border-radius: 6px;
+    color: inherit;
+    font: inherit;
+  }
+
+  .hint {
+    margin: 4px 0 14px;
+    font-size: 0.84rem;
+    color: var(--text-muted, #a1a1aa);
+  }
+
+  button.primary {
+    padding: 11px 24px;
+    background: var(--primary, #9b1b1b);
+    border: none;
+    border-radius: 6px;
+    color: #fff;
+    font: inherit;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+
+  .session {
+    display: grid;
+    grid-template-columns: 190px 1fr auto;
+    gap: 16px;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.06));
+  }
+
+  .session:last-child {
+    border-bottom: none;
+  }
+
+  .when strong {
+    display: block;
+    font-size: 0.9rem;
+  }
+
+  .when span {
+    font-size: 0.8rem;
+    color: var(--text-muted, #a1a1aa);
+  }
+
+  .what h3 {
+    margin: 0;
+    font-size: 1rem;
+  }
+
+  .meta {
+    margin: 3px 0 0;
+    font-size: 0.82rem;
+    color: var(--text-muted, #a1a1aa);
+  }
+
+  .rec {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: var(--accent, #c5a059);
+  }
+
+  .pill {
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border-radius: 999px;
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.16));
+    color: var(--text-muted, #a1a1aa);
+    white-space: nowrap;
+  }
+
+  .pill.certified {
+    color: #4ade80;
+    border-color: currentColor;
+  }
+
+  .pill.open,
+  .pill.in_progress {
+    color: var(--accent, #c5a059);
+    border-color: currentColor;
+  }
+
+  .empty {
+    color: var(--text-muted, #a1a1aa);
+    margin: 0;
+  }
+
+  @media (max-width: 760px) {
+    .row.two {
+      grid-template-columns: 1fr;
+    }
+
+    .session {
+      grid-template-columns: 1fr;
+      gap: 4px;
+    }
+  }
+</style>

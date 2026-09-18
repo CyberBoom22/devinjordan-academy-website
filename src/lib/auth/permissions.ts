@@ -279,6 +279,40 @@ export const PERMISSIONS = {
     defaultRoles: ['owner'],
   },
 
+  /* --- Training sessions -------------------------------------------------- */
+  'session.read': {
+    label: 'View training sessions',
+    group: 'Training',
+    description: 'See the class schedule, rosters and attendance.',
+    defaultRoles: ALL_STAFF,
+  },
+  'session.write': {
+    label: 'Create and run sessions',
+    group: 'Training',
+    description: 'Schedule a class, open check-in and run it on the day.',
+    defaultRoles: ['owner', 'admin', 'editor', 'instructor'],
+  },
+  'session.manage': {
+    label: 'Manage any session',
+    group: 'Training',
+    description: 'Edit or delete a session belonging to another instructor.',
+    defaultRoles: ADMINS,
+  },
+  'session.certify': {
+    label: 'Certify a roster',
+    group: 'Training',
+    description:
+      'Sign the attendance record. This is the signature that turns self-reported scans into an official DJSTA-STD-003 record, so it is deliberately not given to editors.',
+    defaultRoles: ['owner', 'admin', 'instructor'],
+  },
+  'attendance.verify': {
+    label: 'Verify attendance',
+    group: 'Training',
+    description:
+      'Confirm or reject a student’s check-in, record time out, and enter qualification scores.',
+    defaultRoles: ['owner', 'admin', 'instructor'],
+  },
+
   /* --- Students ---------------------------------------------------------- */
   'student.read': {
     label: 'View student records',
