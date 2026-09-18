@@ -3,7 +3,7 @@
 **Repo:** `CyberBoom22/devinjordan-academy-website` · Astro 5 (SSR) · Cloudflare Workers · Supabase · TypeScript
 
 > Save as `docs/IMPLEMENTATION_PROMPT.md`, commit it, then start Claude Code with:
-> *"Read docs/IMPLEMENTATION_PROMPT.md. Confirm the constraints in §2 still hold, then begin Phase 1."*
+> _"Read docs/IMPLEMENTATION_PROMPT.md. Confirm the constraints in §2 still hold, then begin Phase 1."_
 
 ---
 
@@ -11,22 +11,22 @@
 
 Do not invent parallel systems. Everything below is already built and must be reused:
 
-| Concern | Where it lives | How to use it |
-|---|---|---|
-| Permission registry | `src/lib/auth/permissions.ts` | **Source of truth.** Add new keys here, then `npm run db:permissions` and paste the SQL into the new migration |
-| Session + permission check | `src/lib/auth/session.ts` | `can(session, 'key')`, `canAny()`, `outranks()` — synchronous, resolved once in middleware |
-| Admin guard, 2FA, security headers | `src/middleware.ts` | Guards `/admin/*` automatically. New admin pages are protected the moment they exist |
-| DB authorisation | `app.has_permission(key)` in `0001_rbac.sql` | Every RLS policy calls it. Never write a role-name check in a policy |
-| Audit trail | `public.audit_log` + `app.record_audit(action, entity, entity_id, summary, details)` | Call it for every issue, void, certify |
-| Per-person exceptions | `public.user_permissions` (grant/deny, `reason` required) | This is how one instructor gets certificate issuing without becoming an admin — no new mechanism needed |
-| Courses | `public.courses` (0002_content.sql) | **Extend with ALTER TABLE.** Do not create a second courses table |
-| Instructors | `public.instructors` + `instructor_records` | Session instructor and certificate signatory reference this |
-| Email | `src/lib/email/send.ts` — `getMailConfig(runtimeEnv)`, `sendEmail(envelope, config)` | Returns results, never throws. Follow that contract |
-| Invite email as a template example | `src/lib/email/invite.ts` | Match its html+text shape |
-| CSRF for unauthenticated forms | `src/lib/csrf.ts` | See the required change in §2.4 |
-| Design tokens | `src/styles/tokens.css` | `--primary: #9b1b1b`, `--accent: #c5a059`, surfaces, status palette |
-| Supabase clients | `src/lib/supabase/server.ts`, `browser.ts`, `env.ts` | `Astro.locals.supabase` is already request-scoped |
-| Generated DB types | `src/lib/supabase/database.types.ts` | Regenerate with `npm run db:types` after each migration |
+| Concern                            | Where it lives                                                                       | How to use it                                                                                                  |
+| ---------------------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| Permission registry                | `src/lib/auth/permissions.ts`                                                        | **Source of truth.** Add new keys here, then `npm run db:permissions` and paste the SQL into the new migration |
+| Session + permission check         | `src/lib/auth/session.ts`                                                            | `can(session, 'key')`, `canAny()`, `outranks()` — synchronous, resolved once in middleware                     |
+| Admin guard, 2FA, security headers | `src/middleware.ts`                                                                  | Guards `/admin/*` automatically. New admin pages are protected the moment they exist                           |
+| DB authorisation                   | `app.has_permission(key)` in `0001_rbac.sql`                                         | Every RLS policy calls it. Never write a role-name check in a policy                                           |
+| Audit trail                        | `public.audit_log` + `app.record_audit(action, entity, entity_id, summary, details)` | Call it for every issue, void, certify                                                                         |
+| Per-person exceptions              | `public.user_permissions` (grant/deny, `reason` required)                            | This is how one instructor gets certificate issuing without becoming an admin — no new mechanism needed        |
+| Courses                            | `public.courses` (0002_content.sql)                                                  | **Extend with ALTER TABLE.** Do not create a second courses table                                              |
+| Instructors                        | `public.instructors` + `instructor_records`                                          | Session instructor and certificate signatory reference this                                                    |
+| Email                              | `src/lib/email/send.ts` — `getMailConfig(runtimeEnv)`, `sendEmail(envelope, config)` | Returns results, never throws. Follow that contract                                                            |
+| Invite email as a template example | `src/lib/email/invite.ts`                                                            | Match its html+text shape                                                                                      |
+| CSRF for unauthenticated forms     | `src/lib/csrf.ts`                                                                    | See the required change in §2.4                                                                                |
+| Design tokens                      | `src/styles/tokens.css`                                                              | `--primary: #9b1b1b`, `--accent: #c5a059`, surfaces, status palette                                            |
+| Supabase clients                   | `src/lib/supabase/server.ts`, `browser.ts`, `env.ts`                                 | `Astro.locals.supabase` is already request-scoped                                                              |
+| Generated DB types                 | `src/lib/supabase/database.types.ts`                                                 | Regenerate with `npm run db:types` after each migration                                                        |
 
 Last migration is `0011_invite_delivery.sql`. **New migrations start at `0012`.**
 
@@ -37,16 +37,20 @@ Before Phase 1, print a one-page summary of: the `courses` table columns, the RL
 ## 2. Hard constraints of this deployment — these kill the obvious approaches
 
 ### 2.1 No headless browser. PDFs must be made with `pdf-lib`.
+
 This runs on Cloudflare Workers. Puppeteer, Playwright, `@sparticuz/chromium`, and any HTML→PDF service are **not available**. `nodejs_compat` is on but there is no filesystem and no subprocess.
 
 Use **`pdf-lib`** (pure JS, Workers-compatible) plus **`@pdf-lib/fontkit`** if a brand font is needed:
+
 - Store `DJSTA_Certificate_of_Completion_TEMPLATE.pdf` and a generated `DJSTA-STD-003_roster_template.pdf` in a **private Supabase Storage bucket** named `pdf-templates`.
 - Load the template with `PDFDocument.load()`, stamp text at measured coordinates, save, upload the result. Do not re-draw the design from scratch — the border, logo and typography come from the template.
 - Build a small coordinate map in `src/lib/pdf/certificate-layout.ts` with a comment explaining how each Y value was measured, because the next person to nudge a field will have no other way to know.
 - Long names must shrink to fit: measure with `font.widthOfTextAtSize()` and step the size down until it fits the box, rather than overflowing the border.
 
 ### 2.2 CSP is `script-src 'self'` with no `'unsafe-inline'` in production.
+
 (`src/lib/security.ts`.) Consequences:
+
 - **No CDN scripts. No inline `<script>` blocks.** Client JS goes in `src/scripts/*.ts` and is imported by the component, matching `src/scripts/ori.ts` and `news.ts`.
 - **QR codes are generated server-side as SVG** and rendered inline in the markup. Use the `qrcode` npm package's `toString(text, { type: 'svg' })` on the server. Never a QR image API.
 - `img-src 'self' data:` — data URIs are allowed if you prefer a data-URI `<img>` over inline SVG.
@@ -54,12 +58,15 @@ Use **`pdf-lib`** (pure JS, Workers-compatible) plus **`@pdf-lib/fontkit`** if a
 - `connect-src` already permits the Supabase origin over https and wss, so Realtime works without touching the CSP.
 
 ### 2.3 `Permissions-Policy: geolocation=()` blocks location entirely.
+
 Do not build geofenced check-in. The header disables the API site-wide, and weakening it for one route is not worth it — a student with a bad GPS fix being locked out of their own class is a worse failure than a student checking in from the parking lot. Use the rotating token in §7 instead.
 
 ### 2.4 `src/lib/csrf.ts` is scoped to `PATH = '/admin'`.
+
 The public check-in form is an unauthenticated POST, which is exactly what that module exists for — but its cookie path won't reach `/check-in`. Refactor `issueCsrfToken(cookies, url)` and `csrfValid(cookies, submitted)` to take an explicit path (`'/admin'` or `'/check-in'`) with separate cookie names, keeping the constant-time compare and the reuse-don't-rotate behaviour. Update the existing login/register callers in the same commit.
 
 ### 2.5 `MAX_SESSION_HOURS = 2` will sign the instructor out mid-class.
+
 An 8-hour PTC qualification day outlives the admin session, and the projector view bouncing to a 2FA prompt in front of a room of students is not acceptable. **Do not raise the global cap** — it exists for good reason.
 
 Instead: the live projector view lives **outside `/admin`**, at `/session/[presenterToken]`, where `presenterToken` is a high-entropy token minted from the admin UI when the session opens, stored on `course_sessions`, valid only between `checkin_opens_at` and `checkin_closes_at + 2h`, and revocable with one click. That page is read-only — it shows the QR and the live roster and nothing else. Every state-changing action (verify, certify, score, issue) stays behind `/admin` with the full guard, where a re-auth is merely mildly annoying.
@@ -67,6 +74,7 @@ Instead: the live projector view lives **outside `/admin`**, at `/session/[prese
 Add `/session/`, `/check-in/` and `/verify/` to the sitemap filter exclusion in `astro.config.mjs` alongside `/admin`.
 
 ### 2.6 2FA is mandatory for every admin account.
+
 Instructors who will run sessions need TOTP enrolled before their first class. Add a line about this to the invite email copy and flag it in the Phase 1 report.
 
 ---
@@ -105,7 +113,7 @@ Append two groups, matching the existing `PermissionDef` shape and the house com
 
 ### `supabase/migrations/0012_training_records.sql`
 
-Follow the file-header comment convention of `0010_required_forms.sql`: explain *why* the schema insists on what it insists on.
+Follow the file-header comment convention of `0010_required_forms.sql`: explain _why_ the schema insists on what it insists on.
 
 ```sql
 -- Extend the existing courses table rather than adding a second one.
@@ -321,6 +329,7 @@ Add a "Training" section to the admin nav in `src/components/layout/Nav.astro` a
 ## 7. Check-in flow
 
 ### Projector view — `/session/[presenterToken]`
+
 Full-bleed dark layout on `--bg-dark`. Server-rendered QR as inline SVG, minimum 420px, quiet zone intact, encoding `https://devinjordansecuritytrainingacademy.com/check-in/{checkin_token}`. Beneath it: the URL as readable text and a 6-character backup code, because phones fail and the instructor needs a fallback that isn't "come up to the front."
 
 Live roster via Supabase Realtime on `session_checkins` filtered to this session, using the anon key from the browser plus a `security definer` function that returns **only** first name + last initial + time-in for a valid presenter token. A projected screen is visible to the whole room and to anyone walking past; it must not display DOBs, emails or full student numbers. Fall back to 5s polling if the socket drops.
@@ -328,6 +337,7 @@ Live roster via Supabase Realtime on `session_checkins` filtered to this session
 If `rotate_token` is on, the QR regenerates every 60s from an HMAC of `(checkin_token, 60s bucket)`, accepting the current and previous bucket. That is the answer to a student texting the link to someone at home — not geolocation (§2.3).
 
 ### Student page — `/check-in/[token]`
+
 One page, mobile-first at 360px, large tap targets, works on a weak signal. No account.
 
 1. Show session title, instructor, location — so they know they scanned the right class.
@@ -346,6 +356,7 @@ Outside the check-in window: a plain "this session is closed, ask your instructo
 Rate limit by IP (10 attempts / 10 min) and cap new-student registrations per session. Use a Workers KV namespace or a `checkin_attempts` table; if KV, create the binding in `wrangler.toml` where the commented-out `SESSION` namespace already shows the shape.
 
 ### Instructor certification
+
 Signature via a `<canvas>` pad in `src/scripts/signature.ts` (external module — CSP), uploaded to the `signatures` bucket as PNG. Certifying freezes the roster, sets `status = 'certified'`, generates the DJSTA-STD-003 roster PDF into `rosters/`, and calls `app.record_audit('session.certify', 'course_sessions', id, …)`.
 
 ---
@@ -353,6 +364,7 @@ Signature via a `<canvas>` pad in `src/scripts/signature.ts` (external module �
 ## 8. Certificate issuance
 
 ### Preconditions — all enforced server-side, each with its own error message
+
 1. Caller holds `certificate.issue`.
 2. `course_sessions.status = 'certified'`.
 3. A `session_checkins` row for that student with `status = 'verified'`.
@@ -363,18 +375,23 @@ Signature via a `<canvas>` pad in `src/scripts/signature.ts` (external module �
 Never partially issue. If PDF generation or upload fails, roll back — a burned certificate number is a permanent gap in a credential series that somebody will have to explain in two years.
 
 ### The issue transaction
+
 Allocate `app.next_record_number('certificate','DJSTA-CERT')` → snapshot names → render PDF with `pdf-lib` (§2.1) → upload to `certificates/{YYYY}/{certificate_no}.pdf` → mint `verify_slug` (22+ chars, `crypto.getRandomValues`) → insert row → `app.record_audit('certificate.issue', …)` → queue email.
 
 ### Fields stamped on the template
+
 `[STUDENT FULL NAME]` (uppercase, auto-shrink), `[COURSE / PROGRAM NAME]`, completion date, and `Qualification Score: {score}/{possible} ({percent}%)` — **omit the entire score line** for pass/fail courses rather than printing a blank. Signature blocks: certifying instructor from the session, second signatory default `Che' M. Gary, CEO, DJSTA`, both configurable in site settings rather than hardcoded. Footer: certificate number, student record number, course record ID, plus a small QR to `/verify/{slug}`.
 
 ### Delivery — both
+
 - **Email** through the existing `sendEmail()` with the PDF as a base64 attachment (add `attachments` support to the `Envelope` type; Resend takes `[{ filename, content }]`). Subject: `Your DJSTA Certificate — {course_name}`. Record `email_message_id` / `email_error`; surface failures with a one-click resend. Preserve the module's no-throw contract.
 
   **Address the two-domain mismatch in the body copy.** The mail sends from `devinjordansecurity.com` (the domain verified in Resend) while the verification link points at `devinjordansecuritytrainingacademy.com` (the canonical site). This is intentional, but to a student it looks like the two halves of a phishing attempt. So the email must: name Devin Jordan Security Training Academy in full in the first line, state plainly that it was sent from `devinjordansecurity.com` and that certificates are verified at `devinjordansecuritytrainingacademy.com/verify`, and show the verify URL as visible text rather than a bare "click here". Same treatment in the plain-text part. A sender line that explains itself costs two sentences; a student who deletes their own certificate as spam costs a phone call and a reissue.
+
 - **Download** via signed URL from the certificates screen, plus "download all" for a session and a bulk "issue for all passing students" that still runs all six preconditions per student.
 
 ### Verify and void
+
 `/verify/[slug]` shows certificate number, name, course, completion date, issue date, status, academy. Nothing else. Unknown slug → neutral "No certificate found with that number", rate limited, no enumeration hints. Void requires `certificate.void` and a typed reason; the row and PDF are kept forever and the verify page flips to an unmistakable VOID state.
 
 ---
@@ -420,7 +437,8 @@ Allocate `app.next_record_number('certificate','DJSTA-CERT')` → snapshot names
 ## 12. Uploads needed before Phase 5
 
 Put these in `docs/forms/` and tell Claude Code they are there:
+
 - `DJSTA_Certificate_of_Completion_TEMPLATE.pdf`
 - `DJSTA_Classroom_Attendance_Roster.pdf` (form DJSTA-STD-003)
 
-*Not legal advice — have DJSTA's NJ counsel review the retention, consent and privacy-notice wording before go-live.*
+_Not legal advice — have DJSTA's NJ counsel review the retention, consent and privacy-notice wording before go-live._
