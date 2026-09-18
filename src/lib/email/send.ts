@@ -15,10 +15,22 @@
 export type EmailResult = { ok: true; messageId: string } | { ok: false; error: string };
 
 export type Envelope = {
-  to: string;
+  /**
+   * One address, or several. An array goes to Resend as-is, so the recipients
+   * can see each other — fine for an internal notification going to the people
+   * who share the inbox, and the reason nothing addressed to a member of the
+   * public may ever be sent this way.
+   */
+  to: string | string[];
   subject: string;
   html: string;
   text: string;
+  /**
+   * Overrides the configured reply-to for this one message. An enquiry
+   * notification sets it to the visitor, so that hitting reply answers the
+   * person who asked rather than the academy's own unattended inbox.
+   */
+  replyTo?: string;
 };
 
 export type MailConfig = {
@@ -51,6 +63,8 @@ export function getMailConfig(runtimeEnv?: Record<string, string | undefined>): 
 }
 
 export async function sendEmail(envelope: Envelope, config: MailConfig): Promise<EmailResult> {
+  const replyTo = envelope.replyTo ?? config.replyTo;
+
   try {
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -60,13 +74,13 @@ export async function sendEmail(envelope: Envelope, config: MailConfig): Promise
       },
       body: JSON.stringify({
         from: config.from,
-        to: [envelope.to],
+        to: Array.isArray(envelope.to) ? envelope.to : [envelope.to],
         subject: envelope.subject,
         html: envelope.html,
         // Always both. A text part is what a plain-text client shows, and its
         // absence is one of the cheaper ways to look like spam.
         text: envelope.text,
-        ...(config.replyTo ? { reply_to: config.replyTo } : {}),
+        ...(replyTo ? { reply_to: replyTo } : {}),
       }),
       signal: AbortSignal.timeout(15_000),
     });

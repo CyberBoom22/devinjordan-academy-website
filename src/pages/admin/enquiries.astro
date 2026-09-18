@@ -1,0 +1,403 @@
+---
+/**
+ * Enquiries, from the inside.
+ *
+ * The queue behind the public contact form. Its whole job is to make an
+ * unanswered enquiry impossible to lose, so the list is ordered by what needs a
+ * person rather than by what arrived last, and a failed notification is shown
+ * as loudly as an unanswered message.
+ *
+ * Those two failures look identical from an inbox and need opposite remedies:
+ * a notification that never sent means nobody knows the enquiry exists, and the
+ * fix is here on this screen. An enquiry nobody has replied to means somebody
+ * saw it and did not act, and the fix is a phone call. Showing them the same
+ * way would hide the first inside the second.
+ *
+ * Status is deliberately coarse — new, in progress, closed. A finer workflow
+ * would be a CRM, and the academy already has a phone.
+ */
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { can } from '../../lib/auth/session';
+
+const { supabase, session } = Astro.locals;
+
+if (!can(session, 'enquiry.read')) {
+  return Astro.redirect('/admin?error=forbidden', 303);
+}
+
+const mayWrite = can(session, 'enquiry.write');
+
+type EnquiryRow = {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  preferred_contact: string | null;
+  program_interest: string | null;
+  availability: string | null;
+  heard_from: string | null;
+  message: string;
+  status: string;
+  notes: string | null;
+  notify_status: string;
+  notified_at: string | null;
+  notified_to: string | null;
+  notify_error: string | null;
+  created_at: string;
+};
+
+let notice: { kind: 'success' | 'error'; message: string } | null = null;
+
+if (Astro.request.method === 'POST' && supabase && mayWrite) {
+  const form = await Astro.request.formData();
+  const action = String(form.get('action') ?? '');
+  const id = String(form.get('id') ?? '');
+
+  if (action === 'status') {
+    const next = String(form.get('status') ?? '');
+    const allowed = ['new', 'in_progress', 'closed'];
+    if (!allowed.includes(next)) {
+      notice = { kind: 'error', message: 'That is not a status.' };
+    } else {
+      const { error } = await supabase
+        .from('enquiries')
+        .update({ status: next, handled_by: session.user?.id })
+        .eq('id', id);
+      notice = error
+        ? { kind: 'error', message: error.message }
+        : { kind: 'success', message: 'Updated.' };
+    }
+  }
+
+  if (action === 'note') {
+    const { error } = await supabase
+      .from('enquiries')
+      .update({
+        notes: String(form.get('notes') ?? '').trim() || null,
+        handled_by: session.user?.id,
+      })
+      .eq('id', id);
+    notice = error
+      ? { kind: 'error', message: error.message }
+      : { kind: 'success', message: 'Note saved.' };
+  }
+}
+
+let rows: EnquiryRow[] = [];
+
+if (supabase) {
+  const { data } = await supabase
+    .from('enquiries')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(200);
+  rows = (data ?? []) as unknown as EnquiryRow[];
+}
+
+const open = rows.filter((row) => row.status !== 'closed');
+const closed = rows.filter((row) => row.status === 'closed');
+/** Nobody was told about these. They are the emergency, not the backlog. */
+const undelivered = rows.filter((row) => row.notify_status !== 'sent');
+
+function when(value: string): string {
+  return new Date(value).toLocaleString('en-US', {
+    timeZone: 'America/New_York',
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
+}
+
+const STATUS_LABEL: Record<string, string> = {
+  new: 'New',
+  in_progress: 'In progress',
+  closed: 'Closed',
+};
+---
+
+<AdminLayout title="Enquiries">
+  <div class="admin-head">
+    <h1>Enquiries</h1>
+    <p>
+      Everything sent through the public contact form. Each one is emailed to the owner and every
+      instructor as it arrives; this is the record, and the place to catch the ones the email did
+      not reach.
+    </p>
+  </div>
+
+  {notice && <div class:list={['notice', notice.kind]}>{notice.message}</div>}
+
+  {
+    undelivered.length > 0 && (
+      <div class="notice error alert">
+        <strong>
+          {undelivered.length} {undelivered.length === 1 ? 'enquiry' : 'enquiries'} were not emailed
+          to anyone.
+        </strong>
+        <span>
+          They are saved and listed below. Nobody was notified, so they need working through by
+          hand.
+        </span>
+      </div>
+    )
+  }
+
+  <section class="panel">
+    <h2>Open · {open.length}</h2>
+
+    {open.length === 0 && <p class="empty">Nothing waiting. Every enquiry has been closed out.</p>}
+
+    {
+      open.map((row) => (
+        <article class:list={['enquiry', row.notify_status !== 'sent' && 'undelivered']}>
+          <header>
+            <div>
+              <h3>{row.name}</h3>
+              <p class="meta">
+                {when(row.created_at)}
+                {row.program_interest && <> · {row.program_interest}</>}
+              </p>
+            </div>
+            <span class:list={['pill', row.status]}>{STATUS_LABEL[row.status] ?? row.status}</span>
+          </header>
+
+          <p class="reach">
+            {row.email && <a href={`mailto:${row.email}`}>{row.email}</a>}
+            {row.email && row.phone && <span class="sep">·</span>}
+            {row.phone && <a href={`tel:${row.phone.replace(/[^\d+]/g, '')}`}>{row.phone}</a>}
+            {row.preferred_contact && <span class="prefers">prefers {row.preferred_contact}</span>}
+          </p>
+
+          <p class="message">{row.message}</p>
+
+          <dl class="extras">
+            {row.availability && (
+              <>
+                <dt>Available</dt>
+                <dd>{row.availability}</dd>
+              </>
+            )}
+            {row.heard_from && (
+              <>
+                <dt>Heard via</dt>
+                <dd>{row.heard_from}</dd>
+              </>
+            )}
+          </dl>
+
+          {row.notify_status !== 'sent' && (
+            <p class="delivery">Not emailed: {row.notify_error ?? 'no reason recorded'}</p>
+          )}
+
+          {mayWrite && (
+            <div class="actions">
+              <form method="POST">
+                <input type="hidden" name="action" value="status" />
+                <input type="hidden" name="id" value={row.id} />
+                <select name="status" aria-label={`Status for ${row.name}`}>
+                  <option value="new" selected={row.status === 'new'}>
+                    New
+                  </option>
+                  <option value="in_progress" selected={row.status === 'in_progress'}>
+                    In progress
+                  </option>
+                  <option value="closed" selected={row.status === 'closed'}>
+                    Closed
+                  </option>
+                </select>
+                <button type="submit">Set</button>
+              </form>
+
+              <form method="POST" class="note-form">
+                <input type="hidden" name="action" value="note" />
+                <input type="hidden" name="id" value={row.id} />
+                <input
+                  type="text"
+                  name="notes"
+                  value={row.notes ?? ''}
+                  placeholder="Internal note — what was agreed, who is calling back"
+                  maxlength="1000"
+                />
+                <button type="submit">Save</button>
+              </form>
+            </div>
+          )}
+        </article>
+      ))
+    }
+  </section>
+
+  {
+    closed.length > 0 && (
+      <section class="panel muted">
+        <h2>Closed · {closed.length}</h2>
+        {closed.map((row) => (
+          <article class="enquiry small">
+            <header>
+              <div>
+                <h3>{row.name}</h3>
+                <p class="meta">
+                  {when(row.created_at)}
+                  {row.program_interest && <> · {row.program_interest}</>}
+                </p>
+              </div>
+            </header>
+            {row.notes && <p class="note">{row.notes}</p>}
+          </article>
+        ))}
+      </section>
+    )
+  }
+</AdminLayout>
+
+<style>
+  .panel {
+    margin-bottom: 30px;
+  }
+
+  .panel.muted {
+    opacity: 0.72;
+  }
+
+  .panel h2 {
+    font-size: 0.8rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent, #c5a059);
+    margin: 0 0 14px;
+  }
+
+  .alert {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .enquiry {
+    background: var(--surface-1, #17171b);
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+    border-radius: 8px;
+    padding: 18px 20px;
+    margin-bottom: 14px;
+  }
+
+  .enquiry.undelivered {
+    border-left: 3px solid var(--danger, #b91c1c);
+  }
+
+  .enquiry header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 14px;
+  }
+
+  .enquiry h3 {
+    margin: 0;
+    font-size: 1.05rem;
+  }
+
+  .meta {
+    margin: 2px 0 0;
+    font-size: 0.82rem;
+    color: var(--text-muted, #a1a1aa);
+  }
+
+  .pill {
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border-radius: 999px;
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.14));
+    white-space: nowrap;
+  }
+
+  .pill.new {
+    color: var(--accent, #c5a059);
+    border-color: currentColor;
+  }
+
+  .reach {
+    margin: 12px 0 0;
+    font-size: 0.9rem;
+  }
+
+  .reach a {
+    color: var(--accent, #c5a059);
+  }
+
+  .sep,
+  .prefers {
+    color: var(--text-muted, #a1a1aa);
+    margin: 0 8px;
+  }
+
+  .prefers {
+    font-size: 0.8rem;
+  }
+
+  .message {
+    margin: 12px 0 0;
+    white-space: pre-wrap;
+    line-height: 1.55;
+  }
+
+  .extras {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 2px 12px;
+    margin: 12px 0 0;
+    font-size: 0.85rem;
+  }
+
+  .extras dt {
+    color: var(--text-muted, #a1a1aa);
+  }
+
+  .extras dd {
+    margin: 0;
+  }
+
+  .delivery {
+    margin: 12px 0 0;
+    font-size: 0.83rem;
+    color: var(--danger, #f87171);
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  }
+
+  .actions form {
+    display: flex;
+    gap: 6px;
+  }
+
+  .note-form {
+    flex: 1;
+    min-width: 260px;
+  }
+
+  .note-form input {
+    flex: 1;
+  }
+
+  .enquiry.small {
+    padding: 12px 16px;
+  }
+
+  .note {
+    margin: 8px 0 0;
+    font-size: 0.85rem;
+    color: var(--text-muted, #a1a1aa);
+  }
+
+  .empty {
+    color: var(--text-muted, #a1a1aa);
+  }
+</style>

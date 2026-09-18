@@ -1,0 +1,639 @@
+---
+/**
+ * Contact and interest form.
+ *
+ * The public route into the academy. It replaces the Forms page in the nav,
+ * which was the wrong thing to put in front of a visitor: the packet is an
+ * internal training record, and a stranger reading a list of waivers and
+ * eligibility screenings before anybody has spoken to them learns nothing and
+ * leaves.
+ *
+ * WHAT IT ASKS AND WHAT IT DOES NOT
+ * ---------------------------------
+ * Name, how to reach them, what they are interested in, when they are free.
+ * Nothing else. No date of birth, no address, no firearms history, no
+ * eligibility questions — all of that belongs in the packet, once there is a
+ * student record to attach it to and a person who can explain why it is being
+ * asked. A first contact form that opens with a criminal-history question is a
+ * form nobody finishes.
+ *
+ * THE SUBMISSION IS WRITTEN BEFORE THE EMAIL IS SENT
+ * --------------------------------------------------
+ * Two steps, and the second one depends on Resend being reachable. Writing the
+ * row first means a provider outage costs a notification rather than an
+ * enquiry: the back office can still work the list, and the delivery failure
+ * is recorded next to the row instead of vanishing. The visitor is told it
+ * arrived either way, because from where they stand it did.
+ *
+ * WHY THE SERVICE ROLE IS USED HERE
+ * ---------------------------------
+ * `enquiries` has a public insert policy, so the insert itself does not need
+ * it. The rate-limit table and the recipient lookup do: a signed-out visitor
+ * must not be able to read the academy's staff roster or see who else has been
+ * submitting forms. Both stay server-side. This page must never import from
+ * anything that ships to the browser.
+ */
+import BaseLayout from '../layouts/BaseLayout.astro';
+import PageBanner from '../components/ui/PageBanner.astro';
+import CtaBand from '../components/ui/CtaBand.astro';
+import { csrfValid, issueCsrfToken, clearCsrfToken } from '../lib/csrf';
+import { getMailConfig, sendEmail } from '../lib/email/send';
+import { buildEnquiryEmail } from '../lib/email/enquiry';
+import { getEnquiryRecipients } from '../lib/notify/recipients';
+import { createAdminClient } from '../lib/supabase/server';
+import { getSiteUrl } from '../lib/supabase/env';
+import { getSettings, getCourseCategories } from '../lib/content/repository';
+
+const { supabase } = Astro.locals;
+const runtimeEnv = Astro.locals.runtime?.env as Record<string, string | undefined> | undefined;
+
+/** Ten in ten minutes, per /24. Generous for a household, useless for a script. */
+const RATE_LIMIT = 10;
+const RATE_WINDOW_MINUTES = 10;
+
+const PREFERENCES = ['email', 'text', 'phone'] as const;
+type Preference = (typeof PREFERENCES)[number];
+
+/**
+ * A /24 or /64, never the full address.
+ *
+ * Rate limiting needs to know "roughly the same origin", not "exactly this
+ * person". Truncating means the abuse counter is not also a log of who visited
+ * the contact page.
+ */
+function ipPrefix(raw: string | null): string {
+  if (!raw) return 'unknown';
+  const ip = raw.split(',')[0]!.trim();
+  if (ip.includes(':')) return `${ip.split(':').slice(0, 4).join(':')}::/64`;
+  const octets = ip.split('.');
+  return octets.length === 4 ? `${octets.slice(0, 3).join('.')}.0/24` : 'unknown';
+}
+
+/** Trim, collapse runaway whitespace, and cap. Null when nothing is left. */
+function clean(value: unknown, max: number): string | null {
+  const text = String(value ?? '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return text ? text.slice(0, max) : null;
+}
+
+/** The message keeps its line breaks; only the length is capped. */
+function cleanMessage(value: unknown, max: number): string | null {
+  const text = String(value ?? '').trim();
+  return text ? text.slice(0, max) : null;
+}
+
+/**
+ * Deliberately permissive. The purpose is to catch a typo, not to adjudicate
+ * RFC 5322 — a real address rejected by a clever regex is a lost customer, and
+ * the only test that actually proves an address works is sending to it.
+ */
+function looksLikeEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+type Notice = { kind: 'success' | 'error'; message: string };
+
+let notice: Notice | null = null;
+let submitted = false;
+/** Kept so a rejected submission comes back filled in rather than blank. */
+let values: Record<string, string> = {};
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+
+  values = {
+    name: String(form.get('name') ?? ''),
+    email: String(form.get('email') ?? ''),
+    phone: String(form.get('phone') ?? ''),
+    preferred: String(form.get('preferred') ?? ''),
+    program: String(form.get('program') ?? ''),
+    availability: String(form.get('availability') ?? ''),
+    heardFrom: String(form.get('heardFrom') ?? ''),
+    message: String(form.get('message') ?? ''),
+  };
+
+  const name = clean(form.get('name'), 120);
+  const email = clean(form.get('email'), 200)?.toLowerCase() ?? null;
+  const phone = clean(form.get('phone'), 40);
+  const message = cleanMessage(form.get('message'), 4000);
+  const preferredRaw = String(form.get('preferred') ?? '');
+  const preferred: Preference | null = PREFERENCES.includes(preferredRaw as Preference)
+    ? (preferredRaw as Preference)
+    : null;
+
+  // A field no human sees and no honest browser fills. Cheaper than a captcha
+  // and it does not punish anyone using a screen reader, because it is hidden
+  // from the accessibility tree too.
+  const trap = String(form.get('company') ?? '').trim();
+
+  if (!csrfValid(Astro.cookies, form.get('csrf'), '/contact')) {
+    notice = {
+      kind: 'error',
+      message: 'That form had expired. Please try once more — nothing was sent.',
+    };
+  } else if (trap) {
+    // Answer exactly as a success looks, so a bot learns nothing about why.
+    submitted = true;
+  } else if (!name) {
+    notice = { kind: 'error', message: 'Please tell us your name.' };
+  } else if (!message) {
+    notice = { kind: 'error', message: 'Please tell us what you are looking for.' };
+  } else if (!email && !phone) {
+    notice = {
+      kind: 'error',
+      message: 'Please leave either an email address or a phone number so we can reply.',
+    };
+  } else if (email && !looksLikeEmail(email)) {
+    notice = { kind: 'error', message: 'That email address does not look right.' };
+  } else {
+    const admin = createAdminClient(runtimeEnv);
+    const prefix = ipPrefix(
+      Astro.request.headers.get('cf-connecting-ip') ?? Astro.request.headers.get('x-forwarded-for'),
+    );
+
+    let limited = false;
+
+    if (admin) {
+      const since = new Date(Date.now() - RATE_WINDOW_MINUTES * 60_000).toISOString();
+      const { count } = await admin
+        .from('enquiry_attempts')
+        .select('id', { count: 'exact', head: true })
+        .eq('ip_prefix', prefix)
+        .gte('created_at', since);
+
+      limited = (count ?? 0) >= RATE_LIMIT;
+      if (!limited) await admin.from('enquiry_attempts').insert({ ip_prefix: prefix });
+    }
+
+    if (limited) {
+      notice = {
+        kind: 'error',
+        message:
+          'That is a lot of messages in a short time. Please give it a few minutes, or call us — the number is below.',
+      };
+    } else {
+      const program = clean(form.get('program'), 160);
+      const availability = clean(form.get('availability'), 200);
+      const heardFrom = clean(form.get('heardFrom'), 160);
+
+      // Insert through the request client, which is anon and covered by the
+      // public insert policy. The service role is not needed to write an
+      // enquiry and is not used for one.
+      const writer = supabase ?? admin;
+      const { data: inserted, error } = writer
+        ? await writer
+            .from('enquiries')
+            .insert({
+              name,
+              email,
+              phone,
+              message,
+              preferred_contact: preferred,
+              program_interest: program,
+              availability,
+              heard_from: heardFrom,
+            })
+            .select('id')
+            .single()
+        : { data: null, error: { message: 'The database is not configured.' } };
+
+      if (error) {
+        notice = {
+          kind: 'error',
+          message:
+            'Something went wrong saving that. Please call us instead — the number is below.',
+        };
+        console.warn(`[contact] insert failed: ${error.message}`);
+      } else {
+        submitted = true;
+
+        // From here on the visitor has already been told it arrived, so no
+        // failure below may change what the page says. Everything is recorded
+        // for the back office instead.
+        const mail = getMailConfig(runtimeEnv);
+        const { emails, problem } = await getEnquiryRecipients(runtimeEnv);
+
+        let status: 'sent' | 'failed' | 'not_sent' = 'not_sent';
+        let sendError: string | null = problem;
+
+        if (mail && emails.length) {
+          const envelope = buildEnquiryEmail({
+            name,
+            email,
+            phone,
+            preferredContact: preferred,
+            programInterest: program,
+            availability,
+            heardFrom,
+            message,
+            adminUrl: `${getSiteUrl(runtimeEnv)}/admin/enquiries`,
+            academyName: 'Devin Jordan Security Training Academy',
+            receivedAt: new Date(),
+          });
+
+          const result = await sendEmail(
+            {
+              ...envelope,
+              to: emails,
+              // Reply goes to the visitor, because that is what everyone does
+              // with an internal notification whatever the body tells them.
+              ...(email ? { replyTo: email } : {}),
+            },
+            mail,
+          );
+
+          status = result.ok ? 'sent' : 'failed';
+          sendError = result.ok ? null : result.error;
+        } else if (!mail) {
+          sendError = 'No Resend key is configured, so no notification was sent.';
+        }
+
+        if (admin && inserted?.id) {
+          await admin
+            .from('enquiries')
+            .update({
+              notify_status: status,
+              notified_at: status === 'sent' ? new Date().toISOString() : null,
+              notified_to: emails.length ? emails.join(', ') : null,
+              notify_error: sendError,
+            })
+            .eq('id', inserted.id);
+        }
+
+        if (status !== 'sent') {
+          console.warn(`[contact] notification not sent: ${sendError ?? 'unknown'}`);
+        }
+
+        clearCsrfToken(Astro.cookies, '/contact');
+      }
+    }
+  }
+}
+
+const csrfToken = issueCsrfToken(Astro.cookies, Astro.url, '/contact');
+
+const [settings, categories] = await Promise.all([
+  getSettings(supabase),
+  getCourseCategories(supabase),
+]);
+
+// Flattened into one list of names for the datalist. The grouping matters on
+// the services page; here the visitor just wants to recognise the course they
+// were told about.
+const courseNames = [...new Set(categories.flatMap((c) => c.courses.map((course) => course.name)))];
+const phoneNumber = settings['contact.primary.phone'] ?? null;
+---
+
+<BaseLayout
+  title="Contact & Course Interest"
+  description="Ask about a course, a qualification date, or private instruction at Devin Jordan Security Training Academy. Tell us how to reach you and we will get back to you."
+>
+  <PageBanner
+    eyebrow="Get in touch"
+    heading="Contact {{Us}}"
+    intro="Tell us what you are looking for and how to reach you. A real person reads every message — usually the instructor who would be teaching you."
+  />
+
+  <div class="contact-wrap">
+    {
+      submitted ? (
+        <div class="contact-done">
+          <div class="done-mark" aria-hidden="true">
+            ✓
+          </div>
+          <h2>Thank you — that reached us.</h2>
+          <p>
+            Your message has gone straight to the instructors and the academy owner. Expect a reply
+            within one business day.
+          </p>
+          {phoneNumber && (
+            <p class="done-phone">
+              In a hurry? Call{' '}
+              <a href={`tel:${phoneNumber.replace(/[^\d+]/g, '')}`}>{phoneNumber}</a>.
+            </p>
+          )}
+          <a class="done-again" href="/contact">
+            Send another message
+          </a>
+        </div>
+      ) : (
+        <form class="contact-form" method="POST" novalidate>
+          <input type="hidden" name="csrf" value={csrfToken} />
+
+          {notice && <div class:list={['notice', notice.kind]}>{notice.message}</div>}
+
+          <p class="form-lede">
+            Everything except your name and message is optional — but leave us at least one way to
+            reply.
+          </p>
+
+          <div class="field-row">
+            <label class="field">
+              <span>
+                Your name <b aria-hidden="true">*</b>
+              </span>
+              <input
+                type="text"
+                name="name"
+                required
+                maxlength="120"
+                value={values.name ?? ''}
+                autocomplete="name"
+              />
+            </label>
+
+            <label class="field">
+              <span>Phone</span>
+              <input
+                type="tel"
+                name="phone"
+                maxlength="40"
+                value={values.phone ?? ''}
+                autocomplete="tel"
+              />
+            </label>
+          </div>
+
+          <div class="field-row">
+            <label class="field">
+              <span>Email</span>
+              <input
+                type="email"
+                name="email"
+                maxlength="200"
+                value={values.email ?? ''}
+                autocomplete="email"
+              />
+            </label>
+
+            <label class="field">
+              <span>Best way to reach you</span>
+              <select name="preferred">
+                <option value="">No preference</option>
+                <option value="phone" selected={values.preferred === 'phone'}>
+                  Phone call
+                </option>
+                <option value="text" selected={values.preferred === 'text'}>
+                  Text message
+                </option>
+                <option value="email" selected={values.preferred === 'email'}>
+                  Email
+                </option>
+              </select>
+            </label>
+          </div>
+
+          <div class="field-row">
+            <label class="field">
+              <span>Programme you are interested in</span>
+              <input
+                type="text"
+                name="program"
+                list="programmes"
+                maxlength="160"
+                placeholder="e.g. NJ Permit to Carry qualification"
+                value={values.program ?? ''}
+              />
+              <datalist id="programmes">
+                {courseNames.map((name) => (
+                  <option value={name} />
+                ))}
+                <option value="Private instruction" />
+                <option value="Not sure yet" />
+              </datalist>
+            </label>
+
+            <label class="field">
+              <span>When are you available?</span>
+              <input
+                type="text"
+                name="availability"
+                maxlength="200"
+                placeholder="e.g. weekends, evenings after 6"
+                value={values.availability ?? ''}
+              />
+            </label>
+          </div>
+
+          <label class="field">
+            <span>
+              What are you looking for? <b aria-hidden="true">*</b>
+            </span>
+            <textarea
+              name="message"
+              rows="5"
+              required
+              maxlength="4000"
+              placeholder="Tell us a little about what you need — a qualification date, a renewal, a first lesson."
+              set:text={values.message ?? ''}
+            />
+          </label>
+
+          <label class="field field-narrow">
+            <span>How did you hear about us?</span>
+            <input type="text" name="heardFrom" maxlength="160" value={values.heardFrom ?? ''} />
+          </label>
+
+          {/* Not a real field. Hidden from sight and from the accessibility tree. */}
+          <div class="trap" aria-hidden="true">
+            <label>
+              Company
+              <input type="text" name="company" tabindex="-1" autocomplete="off" />
+            </label>
+          </div>
+
+          <button type="submit" class="submit">
+            Send message
+          </button>
+
+          <p class="form-foot">
+            We use what you send here to answer you and nothing else. Course paperwork is collected
+            later, in person, once you are enrolled.
+          </p>
+        </form>
+      )
+    }
+  </div>
+
+  <CtaBand
+    heading="Not sure which course you need?"
+    body="Call and ask. Working out what somebody actually needs is a five-minute conversation, and it is free."
+    primaryLabel="View Courses"
+    primaryHref="/#services"
+    secondaryLabel="About the Academy"
+    secondaryHref="/about"
+  />
+</BaseLayout>
+
+<style>
+  .contact-wrap {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 0 20px 90px;
+  }
+
+  .contact-form {
+    background: var(--surface-1, #17171b);
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+    border-radius: 10px;
+    padding: 34px clamp(20px, 4vw, 40px) 38px;
+  }
+
+  .form-lede {
+    margin: 0 0 26px;
+    color: var(--text-muted, #a1a1aa);
+    font-size: 0.95rem;
+  }
+
+  .field-row {
+    display: grid;
+    gap: 18px;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .field {
+    display: block;
+    margin-bottom: 18px;
+  }
+
+  .field-narrow {
+    max-width: 420px;
+  }
+
+  .field > span {
+    display: block;
+    margin-bottom: 7px;
+    font-size: 0.74rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted, #a1a1aa);
+  }
+
+  .field b {
+    color: var(--primary, #9b1b1b);
+  }
+
+  .field input,
+  .field select,
+  .field textarea {
+    width: 100%;
+    padding: 12px 14px;
+    background: var(--surface-2, #101013);
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+    border-radius: 6px;
+    color: inherit;
+    font: inherit;
+  }
+
+  .field textarea {
+    resize: vertical;
+    min-height: 120px;
+  }
+
+  .field input:focus-visible,
+  .field select:focus-visible,
+  .field textarea:focus-visible {
+    outline: 2px solid var(--accent, #c5a059);
+    outline-offset: 1px;
+  }
+
+  /* Off-screen rather than display:none — some bots skip what is not rendered. */
+  .trap {
+    position: absolute;
+    left: -9999px;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+  }
+
+  .submit {
+    margin-top: 10px;
+    padding: 14px 34px;
+    background: var(--primary, #9b1b1b);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font: inherit;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+
+  .submit:hover {
+    filter: brightness(1.12);
+  }
+
+  .form-foot {
+    margin: 22px 0 0;
+    font-size: 0.85rem;
+    color: var(--text-muted, #a1a1aa);
+  }
+
+  .notice {
+    margin: 0 0 22px;
+    padding: 12px 16px;
+    border-radius: 6px;
+    border-left: 3px solid;
+    font-size: 0.95rem;
+  }
+
+  .notice.error {
+    border-color: var(--danger, #b91c1c);
+    background: rgba(185, 28, 28, 0.12);
+  }
+
+  .notice.success {
+    border-color: var(--success, #15803d);
+    background: rgba(21, 128, 61, 0.12);
+  }
+
+  .contact-done {
+    text-align: center;
+    background: var(--surface-1, #17171b);
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+    border-radius: 10px;
+    padding: 56px 28px 50px;
+  }
+
+  .done-mark {
+    width: 58px;
+    height: 58px;
+    margin: 0 auto 20px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    font-size: 1.7rem;
+    color: #fff;
+    background: var(--success, #15803d);
+  }
+
+  .contact-done h2 {
+    margin: 0 0 12px;
+  }
+
+  .contact-done p {
+    margin: 0 auto 10px;
+    max-width: 460px;
+    color: var(--text-muted, #a1a1aa);
+  }
+
+  .done-phone a {
+    color: var(--accent, #c5a059);
+  }
+
+  .done-again {
+    display: inline-block;
+    margin-top: 18px;
+    color: var(--accent, #c5a059);
+    font-size: 0.9rem;
+  }
+
+  @media (max-width: 640px) {
+    .field-row {
+      grid-template-columns: 1fr;
+      gap: 0;
+    }
+  }
+</style>

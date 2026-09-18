@@ -46,7 +46,7 @@ if (Astro.request.method === 'POST') {
   email = String(form.get('email') ?? '').trim();
   const password = String(form.get('password') ?? '');
 
-  if (!csrfValid(Astro.cookies, form.get('csrf'))) {
+  if (!csrfValid(Astro.cookies, form.get('csrf'), '/admin')) {
     // Either a genuinely stale form or a cross-site submission. The two are
     // indistinguishable from here, so the wording suits both.
     error = 'That sign-in form has expired. Please try again.';
@@ -62,13 +62,13 @@ if (Astro.request.method === 'POST') {
       // whether an address is a real account here.
       error = 'That email address and password do not match an account.';
     } else {
-      clearCsrfToken(Astro.cookies);
+      clearCsrfToken(Astro.cookies, '/admin');
       return Astro.redirect(next, 303);
     }
   }
 }
 
-const csrfToken = issueCsrfToken(Astro.cookies, Astro.url);
+const csrfToken = issueCsrfToken(Astro.cookies, Astro.url, '/admin');
 ---
 
 <!doctype html>

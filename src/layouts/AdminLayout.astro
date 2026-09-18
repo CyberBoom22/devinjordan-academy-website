@@ -100,6 +100,12 @@ const NAV: NavGroup[] = [
     group: 'Academy',
     items: [
       {
+        href: '/admin/training/students',
+        label: 'Students',
+        icon: 'fa-solid fa-id-card',
+        needs: ['student.read'],
+      },
+      {
         href: '/admin/enquiries',
         label: 'Enquiries',
         icon: 'fa-solid fa-envelope',
