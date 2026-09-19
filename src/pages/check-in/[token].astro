@@ -39,6 +39,7 @@ import {
   rateLimited,
   type MaskedMatch,
 } from '../../lib/checkin/service';
+import { ensureIntake } from '../../lib/checkin/intake';
 import { sessionDate, sessionTime, sessionZone } from '../../lib/format';
 
 export const prerender = false;
@@ -81,6 +82,12 @@ let step: Step = state === 'open' ? 'choose' : 'closed';
 let error: string | null = null;
 let match: MaskedMatch | null = null;
 let done: { name: string; studentNo: string; timeIn: string; reopened: boolean } | null = null;
+/**
+ * Minted once a student is on the roster, so the confirmation can hand them
+ * their paperwork immediately. Idempotent — a second scan returns the same
+ * link rather than a rival one.
+ */
+let intakeToken: string | null = null;
 let draft: Record<string, string> = {};
 /** Set when a lookup found nobody or several people. */
 let reviewFlag = false;
@@ -147,6 +154,7 @@ if (Astro.request.method === 'POST' && session && state === 'open') {
         timeIn: outcome.timeIn,
         reopened: outcome.reopened,
       };
+      intakeToken = await ensureIntake(session.id, studentId, undefined, runtimeEnv);
       step = 'done';
     } else {
       error = outcome.error;
@@ -229,6 +237,7 @@ if (Astro.request.method === 'POST' && session && state === 'open') {
             timeIn: outcome.timeIn,
             reopened: outcome.reopened,
           };
+          intakeToken = await ensureIntake(session.id, created.studentId, undefined, runtimeEnv);
           step = 'done';
           error = null;
         } else {
@@ -541,6 +550,12 @@ const heading: Record<Step, string> = {
                 <br />
                 Time in {when(done.timeIn)} {sessionZone(done.timeIn)}
               </p>
+              {intakeToken && (
+                <a class="big-btn paperwork" href={`/intake/${intakeToken}`}>
+                  Complete your paperwork
+                </a>
+              )}
+
               <p class="fineprint">
                 Keep your student number — it is yours permanently and you will be asked for it at
                 your next class. Your instructor confirms the roster at the end of the day.
@@ -754,6 +769,12 @@ const heading: Record<Step, string> = {
     font-size: 0.92rem;
     line-height: 1.6;
     color: var(--text-muted, #a1a1aa);
+  }
+
+  .paperwork {
+    text-decoration: none;
+    text-align: center;
+    line-height: 24px;
   }
 
   .fineprint {

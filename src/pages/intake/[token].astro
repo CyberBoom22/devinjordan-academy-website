@@ -1,0 +1,455 @@
+---
+/**
+ * Pre-class intake — the paperwork, before the day.
+ *
+ * On paper this is a clipboard handed out at the door, which is why classes
+ * start late and why waivers get signed in a hurry by somebody who wants to be
+ * on the firing line. Doing it the night before, on a phone, at a kitchen
+ * table, is a better version of the same legal artefact: the same wording, read
+ * by somebody who is not in a queue.
+ *
+ * ONE FORM PER SCREEN
+ * -------------------
+ * Not an accordion and not one long page. The screening is ten questions about
+ * whether you are fit to handle a firearm today, and the waiver is a release of
+ * liability — putting them on the same scroll as "which hand do you shoot
+ * with" invites the whole lot to be skimmed at the same speed. A student sees
+ * the list, opens one, submits it, and comes back to the list.
+ *
+ * NOTHING IS REQUIRED TO BE DONE IN ORDER
+ * ---------------------------------------
+ * A part-finished intake resumes where it was left. The forms upsert on
+ * (student, form, session), so closing the browser halfway through costs
+ * nothing and nobody ends up with two half-signed waivers.
+ *
+ * NO CLIENT JAVASCRIPT
+ * --------------------
+ * Same as check-in: production CSP is `script-src 'self'`, and this is filled
+ * in on phones with poor signal. Every interaction is a form post.
+ */
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import PacketFields from '../../components/forms/PacketFields.astro';
+import { csrfValid, issueCsrfToken } from '../../lib/csrf';
+import {
+  resolveIntakeToken,
+  intakeForms,
+  saveIntakeForm,
+  refreshIntakeCompletion,
+  type IntakeForm,
+} from '../../lib/checkin/intake';
+import { validateSubmission, completeness } from '../../lib/forms/fields';
+import { sessionDate, sessionTime, sessionZone } from '../../lib/format';
+
+export const prerender = false;
+
+const token = Astro.params.token ?? '';
+const runtimeEnv = Astro.locals.runtime?.env as Record<string, string | undefined> | undefined;
+
+const { intake, state } = await resolveIntakeToken(token, runtimeEnv);
+
+let forms: IntakeForm[] = [];
+let errors: Record<string, string> = {};
+let notice: { kind: 'success' | 'error'; message: string } | null = null;
+let justCompleted = false;
+
+/** Which form is open, from ?form=05. Null means the list. */
+let openCode = Astro.url.searchParams.get('form');
+
+if (intake && state === 'open') {
+  if (Astro.request.method === 'POST') {
+    const form = await Astro.request.formData();
+    const code = String(form.get('formCode') ?? '');
+
+    if (!csrfValid(Astro.cookies, form.get('csrf'), '/intake')) {
+      notice = { kind: 'error', message: 'That page had been open a while. Please try again.' };
+      openCode = code || null;
+    } else {
+      const current = await intakeForms(intake.sessionId, intake.studentId, runtimeEnv);
+      const target = current.find((entry) => entry.code === code);
+
+      if (!target) {
+        notice = { kind: 'error', message: 'That form is not part of this class.' };
+        openCode = null;
+      } else {
+        const result = validateSubmission(target.fields, form);
+
+        if (Object.keys(result.errors).length > 0) {
+          errors = result.errors;
+          openCode = code;
+          notice = {
+            kind: 'error',
+            message: 'A few answers still need attention — they are marked below.',
+          };
+        } else {
+          // The signature fields are stored in answers like anything else; the
+          // name is lifted out so a query can ask when somebody signed without
+          // unpacking jsonb.
+          const signatureField = target.fields.find((field) => field.type === 'signature');
+          const signatureName = signatureField
+            ? String(result.answers[signatureField.field_key] ?? '') || null
+            : null;
+
+          const saved = await saveIntakeForm(
+            {
+              sessionId: intake.sessionId,
+              studentId: intake.studentId,
+              formCode: code,
+              answers: result.answers,
+              signatureName,
+            },
+            runtimeEnv,
+          );
+
+          if (saved.ok) {
+            justCompleted = await refreshIntakeCompletion(
+              intake.intakeId,
+              intake.sessionId,
+              intake.studentId,
+              runtimeEnv,
+            );
+            notice = { kind: 'success', message: `“${target.title}” saved.` };
+            openCode = null;
+          } else {
+            notice = { kind: 'error', message: saved.error };
+            openCode = code;
+          }
+        }
+      }
+    }
+  }
+
+  forms = await intakeForms(intake.sessionId, intake.studentId, runtimeEnv);
+}
+
+const csrfToken = issueCsrfToken(Astro.cookies, Astro.url, '/intake');
+
+const open = openCode ? (forms.find((entry) => entry.code === openCode) ?? null) : null;
+const remaining = forms.filter((entry) => entry.status !== 'submitted').length;
+const allDone = forms.length > 0 && remaining === 0;
+---
+
+<BaseLayout
+  title={intake ? `Paperwork — ${intake.courseName}` : 'Paperwork'}
+  description="Complete your pre-class paperwork for a Devin Jordan Security Training Academy course."
+  noindex
+>
+  <main class="wrap">
+    {
+      !intake ? (
+        <section class="card">
+          <h1>That link was not recognised</h1>
+          <p>
+            It may have been mistyped, or it may belong to a class that has finished. Ask your
+            instructor for a new one.
+          </p>
+        </section>
+      ) : state === 'expired' ? (
+        <section class="card">
+          <h1>This link has expired</h1>
+          <p>
+            Paperwork links stop working two hours after the class ends. If you still need to
+            complete something, your instructor can sort it out in person.
+          </p>
+        </section>
+      ) : (
+        <>
+          <header class="head">
+            <p class="eyebrow">{intake.courseName}</p>
+            <h1>{allDone ? 'You are all set' : `Hello ${intake.studentFirstName}`}</h1>
+            <p class="sess">
+              {intake.sessionTitle}
+              <br />
+              {sessionDate(intake.startsAt)} · {sessionTime(intake.startsAt)}–
+              {sessionTime(intake.endsAt)} {sessionZone(intake.startsAt)}
+              <br />
+              {intake.location}
+            </p>
+          </header>
+
+          {notice && <div class:list={['alert', notice.kind]}>{notice.message}</div>}
+
+          {open ? (
+            <section class="card">
+              <h2>{open.title}</h2>
+              <p class="purpose">{open.purpose}</p>
+
+              <form method="POST">
+                <input type="hidden" name="csrf" value={csrfToken} />
+                <input type="hidden" name="formCode" value={open.code} />
+
+                <PacketFields fields={open.fields} answers={open.answers} errors={errors} />
+
+                <button type="submit" class="big-btn">
+                  {open.requiresSignature ? 'Sign and save' : 'Save'}
+                </button>
+                <a class="back" href={`/intake/${token}`}>
+                  Back without saving
+                </a>
+              </form>
+            </section>
+          ) : (
+            <section class="card">
+              {allDone ? (
+                <>
+                  <div class="tick" aria-hidden="true">
+                    ✓
+                  </div>
+                  <p class="big">
+                    {justCompleted
+                      ? 'That was the last one — your paperwork is complete.'
+                      : 'Your paperwork is complete.'}
+                  </p>
+                  <p class="muted">
+                    Bring photo identification on the day. Your instructor reviews everything before
+                    training starts, and may ask you about anything you flagged.
+                  </p>
+                </>
+              ) : (
+                <p class="big">
+                  {remaining} {remaining === 1 ? 'form' : 'forms'} left to complete before your
+                  class.
+                </p>
+              )}
+
+              <ol class="forms">
+                {forms.map((entry) => {
+                  const done = entry.status === 'submitted';
+                  const progress = completeness(entry.fields, entry.answers);
+                  return (
+                    <li class:list={[done && 'done']}>
+                      <a href={`/intake/${token}?form=${entry.code}`}>
+                        <span class="mark" aria-hidden="true">
+                          {done ? '✓' : ''}
+                        </span>
+                        <span class="body">
+                          <span class="name">{entry.title}</span>
+                          <span class="state">
+                            {done
+                              ? 'Completed — tap to review or change'
+                              : progress.answered > 0
+                                ? `Started — ${progress.answered} of ${progress.required} answered`
+                                : entry.requiresSignature
+                                  ? 'Not started — needs your signature'
+                                  : 'Not started'}
+                          </span>
+                        </span>
+                      </a>
+                    </li>
+                  );
+                })}
+              </ol>
+
+              {forms.length === 0 && (
+                <p class="muted">
+                  There is no paperwork to complete for this class. Your instructor will tell you if
+                  that changes.
+                </p>
+              )}
+
+              <p class="fineprint">
+                Everything here is the same wording as the paper packet. Nothing you enter is shared
+                outside the academy, and we never ask for a Social Security number.
+              </p>
+            </section>
+          )}
+        </>
+      )
+    }
+  </main>
+</BaseLayout>
+
+<style>
+  .wrap {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 80px 16px 60px;
+  }
+
+  .head {
+    text-align: center;
+    margin-bottom: 20px;
+  }
+
+  .eyebrow {
+    margin: 0;
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent, #c5a059);
+  }
+
+  .head h1 {
+    margin: 6px 0 10px;
+    font-size: 1.6rem;
+  }
+
+  .sess {
+    margin: 0;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    color: var(--text-muted, #a1a1aa);
+  }
+
+  .card {
+    background: var(--surface-1, #17171b);
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+    border-radius: 12px;
+    padding: 24px 20px 26px;
+  }
+
+  .card h2 {
+    margin: 0 0 8px;
+    font-size: 1.2rem;
+  }
+
+  .purpose {
+    margin: 0 0 22px;
+    font-size: 0.9rem;
+    line-height: 1.55;
+    color: var(--text-muted, #a1a1aa);
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  }
+
+  .big {
+    margin: 0 0 18px;
+    font-size: 1.1rem;
+    text-align: center;
+  }
+
+  .muted {
+    margin: 0 0 16px;
+    text-align: center;
+    color: var(--text-muted, #a1a1aa);
+    font-size: 0.92rem;
+    line-height: 1.6;
+  }
+
+  .alert {
+    margin-bottom: 16px;
+    padding: 13px 16px;
+    border-radius: 8px;
+    border-left: 3px solid;
+    font-size: 0.92rem;
+    line-height: 1.5;
+  }
+
+  .alert.error {
+    border-color: var(--danger, #b91c1c);
+    background: rgba(185, 28, 28, 0.12);
+  }
+
+  .alert.success {
+    border-color: #15803d;
+    background: rgba(21, 128, 61, 0.12);
+  }
+
+  .forms {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .forms li {
+    margin-bottom: 10px;
+  }
+
+  .forms a {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    /* 64px tall: a target for a thumb, not a mouse. */
+    min-height: 64px;
+    padding: 14px 16px;
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.14));
+    border-radius: 10px;
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .forms a:hover,
+  .forms a:focus-visible {
+    border-color: var(--accent, #c5a059);
+  }
+
+  .mark {
+    flex: none;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.26));
+    display: grid;
+    place-items: center;
+    font-size: 0.9rem;
+  }
+
+  .forms li.done .mark {
+    background: #15803d;
+    border-color: #15803d;
+    color: #fff;
+  }
+
+  .body {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .name {
+    font-weight: 600;
+    line-height: 1.35;
+  }
+
+  .state {
+    font-size: 0.82rem;
+    color: var(--text-muted, #a1a1aa);
+  }
+
+  .forms li.done .name {
+    color: var(--text-muted, #a1a1aa);
+  }
+
+  .big-btn {
+    display: block;
+    width: 100%;
+    min-height: 56px;
+    margin-top: 20px;
+    padding: 16px;
+    background: var(--primary, #9b1b1b);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font: inherit;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .back {
+    display: block;
+    margin-top: 14px;
+    text-align: center;
+    font-size: 0.9rem;
+    color: var(--text-muted, #a1a1aa);
+  }
+
+  .tick {
+    width: 64px;
+    height: 64px;
+    margin: 4px auto 16px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    font-size: 2rem;
+    color: #fff;
+    background: #15803d;
+  }
+
+  .fineprint {
+    margin: 20px 0 0;
+    font-size: 0.8rem;
+    line-height: 1.55;
+    color: var(--text-muted, #a1a1aa);
+    text-align: center;
+  }
+</style>

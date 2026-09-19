@@ -21,7 +21,9 @@ export default defineConfig({
       // /admin is guarded; the other three are reached by an unguessable token
       // and listing one would publish a live check-in link or a certificate.
       filter: (page) =>
-        !['/admin', '/session/', '/check-in/', '/verify/'].some((path) => page.includes(path)),
+        !['/admin', '/session/', '/check-in/', '/verify/', '/intake/'].some((path) =>
+          page.includes(path),
+        ),
     }),
   ],
   build: {
