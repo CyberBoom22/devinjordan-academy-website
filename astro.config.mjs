@@ -17,8 +17,11 @@ export default defineConfig({
   }),
   integrations: [
     sitemap({
-      // The admin area is private; it must never appear in a sitemap.
-      filter: (page) => !page.includes('/admin'),
+      // Private or token-addressed areas must never appear in a sitemap.
+      // /admin is guarded; the other three are reached by an unguessable token
+      // and listing one would publish a live check-in link or a certificate.
+      filter: (page) =>
+        !['/admin', '/session/', '/check-in/', '/verify/'].some((path) => page.includes(path)),
     }),
   ],
   build: {

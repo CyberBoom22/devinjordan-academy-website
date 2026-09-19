@@ -1,0 +1,416 @@
+---
+/**
+ * Renders a packet form from its field rows.
+ *
+ * One component for all eleven fillable forms, because the alternative is
+ * eleven components that drift apart — and the one that drifts is the waiver.
+ *
+ * Every input is a plain form control with a name matching field_key. No
+ * client JavaScript at all: the production CSP is `script-src 'self'` with no
+ * inline scripts, and a form that needs JS to submit is a form that fails on
+ * the range where the signal is one bar.
+ *
+ * `initials` renders as a short text input beside the rule rather than a
+ * checkbox. A checkbox is one click and reads as one act; typing your initials
+ * twelve times is twelve deliberate ones, which is the entire point of the
+ * paper form this replaces.
+ */
+import type { PacketField, AnswerValue } from '../../lib/forms/fields';
+import { groupBySection } from '../../lib/forms/fields';
+
+interface Props {
+  fields: PacketField[];
+  /** Previously saved answers, so a part-finished form comes back filled in. */
+  answers?: Record<string, AnswerValue> | null;
+  /** Field key → message, from validateSubmission. */
+  errors?: Record<string, string>;
+  /** Instructor-facing forms show help text that students should not see. */
+  showHelp?: boolean;
+}
+
+const { fields, answers = null, errors = {}, showHelp = true } = Astro.props;
+
+const groups = groupBySection(fields);
+
+function value(key: string): AnswerValue {
+  return (answers ?? {})[key] ?? null;
+}
+
+function str(key: string): string {
+  const v = value(key);
+  return v === null || v === undefined ? '' : Array.isArray(v) ? '' : String(v);
+}
+
+function chosen(key: string, option: string): boolean {
+  const v = value(key);
+  return Array.isArray(v) ? v.includes(option) : v === option;
+}
+---
+
+{
+  groups.map((group) => (
+    <fieldset class="group">
+      {group.section && <legend>{group.section}</legend>}
+
+      {group.fields.map((field) => {
+        const error = errors[field.field_key];
+        const invalid = Boolean(error);
+
+        if (field.type === 'heading') {
+          return <h3 class="field-heading">{field.label}</h3>;
+        }
+
+        if (field.type === 'initials') {
+          return (
+            <div class:list={['rule', invalid && 'invalid']}>
+              <label class="rule-initials">
+                <span class="sr-only">Initials for: {field.label}</span>
+                <input
+                  type="text"
+                  name={field.field_key}
+                  value={str(field.field_key)}
+                  maxlength="8"
+                  autocomplete="off"
+                  aria-invalid={invalid ? 'true' : undefined}
+                  placeholder="__"
+                />
+              </label>
+              <p class="rule-text">{field.label}</p>
+              {error && <p class="err">{error}</p>}
+            </div>
+          );
+        }
+
+        if (field.type === 'boolean') {
+          return (
+            <div class:list={['field', invalid && 'invalid']}>
+              <p class="label">
+                {field.label}
+                {field.required && <b aria-hidden="true">*</b>}
+              </p>
+              {showHelp && field.help && <p class="help">{field.help}</p>}
+              <div class="yesno" role="group" aria-label={field.label}>
+                <label>
+                  <input
+                    type="radio"
+                    name={field.field_key}
+                    value="yes"
+                    checked={value(field.field_key) === true}
+                  />
+                  <span>Yes</span>
+                </label>
+                <label>
+                  <input
+                    type="radio"
+                    name={field.field_key}
+                    value="no"
+                    checked={value(field.field_key) === false}
+                  />
+                  <span>No</span>
+                </label>
+              </div>
+              {error && <p class="err">{error}</p>}
+            </div>
+          );
+        }
+
+        if (field.type === 'multi') {
+          return (
+            <div class:list={['field', invalid && 'invalid']}>
+              <p class="label">
+                {field.label}
+                {field.required && <b aria-hidden="true">*</b>}
+              </p>
+              {showHelp && field.help && <p class="help">{field.help}</p>}
+              <div class="checks">
+                {(field.options ?? []).map((option) => (
+                  <label>
+                    <input
+                      type="checkbox"
+                      name={field.field_key}
+                      value={option}
+                      checked={chosen(field.field_key, option)}
+                    />
+                    <span>{option}</span>
+                  </label>
+                ))}
+              </div>
+              {error && <p class="err">{error}</p>}
+            </div>
+          );
+        }
+
+        if (field.type === 'choice') {
+          const options = field.options ?? [];
+          // A short list is easier to answer as radios than a select, and a
+          // select on a phone is a modal nobody reads. Written as `< 5` rather
+          // than `<= 4` because the Astro template parser reads `<=` after an
+          // identifier as the start of a JSX fragment.
+          const asRadios = options.length < 5;
+          return (
+            <div class:list={['field', invalid && 'invalid']}>
+              <p class="label">
+                {field.label}
+                {field.required && <b aria-hidden="true">*</b>}
+              </p>
+              {showHelp && field.help && <p class="help">{field.help}</p>}
+              {asRadios ? (
+                <div class="checks" role="group" aria-label={field.label}>
+                  {options.map((option) => (
+                    <label>
+                      <input
+                        type="radio"
+                        name={field.field_key}
+                        value={option}
+                        checked={chosen(field.field_key, option)}
+                      />
+                      <span>{option}</span>
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <select name={field.field_key} aria-invalid={invalid ? 'true' : undefined}>
+                  <option value="">Choose…</option>
+                  {options.map((option) => (
+                    <option value={option} selected={chosen(field.field_key, option)}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {error && <p class="err">{error}</p>}
+            </div>
+          );
+        }
+
+        return (
+          <div class:list={['field', invalid && 'invalid']}>
+            <label>
+              <span class="label">
+                {field.label}
+                {field.required && <b aria-hidden="true">*</b>}
+              </span>
+              {showHelp && field.help && <span class="help">{field.help}</span>}
+
+              {field.type === 'textarea' ? (
+                <textarea
+                  name={field.field_key}
+                  rows="4"
+                  maxlength="8000"
+                  aria-invalid={invalid ? 'true' : undefined}
+                  set:text={str(field.field_key)}
+                />
+              ) : (
+                <input
+                  type={
+                    field.type === 'date' ? 'date' : field.type === 'number' ? 'number' : 'text'
+                  }
+                  name={field.field_key}
+                  value={str(field.field_key)}
+                  maxlength={field.type === 'signature' ? 200 : 400}
+                  aria-invalid={invalid ? 'true' : undefined}
+                  placeholder={field.type === 'signature' ? 'Type your full legal name' : undefined}
+                />
+              )}
+            </label>
+            {field.type === 'signature' && (
+              <p class="help sig-note">
+                Typing your name here is your signature. It is recorded with the date and the
+                wording shown above.
+              </p>
+            )}
+            {error && <p class="err">{error}</p>}
+          </div>
+        );
+      })}
+    </fieldset>
+  ))
+}
+
+<style>
+  .group {
+    border: none;
+    padding: 0;
+    margin: 0 0 26px;
+  }
+
+  legend {
+    padding: 0;
+    margin-bottom: 12px;
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent, #c5a059);
+  }
+
+  .field-heading {
+    font-size: 1rem;
+    margin: 20px 0 10px;
+  }
+
+  .field {
+    margin-bottom: 18px;
+  }
+
+  .field label {
+    display: block;
+  }
+
+  .label {
+    display: block;
+    margin: 0 0 6px;
+    font-size: 0.95rem;
+    line-height: 1.45;
+  }
+
+  .label b {
+    color: var(--primary, #c85b5b);
+    margin-left: 3px;
+  }
+
+  .help {
+    display: block;
+    margin: 0 0 8px;
+    font-size: 0.83rem;
+    color: var(--text-muted, #a1a1aa);
+    line-height: 1.5;
+  }
+
+  .sig-note {
+    margin-top: 6px;
+  }
+
+  input[type='text'],
+  input[type='date'],
+  input[type='number'],
+  select,
+  textarea {
+    width: 100%;
+    padding: 12px 14px;
+    background: var(--surface-2, #101013);
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.14));
+    border-radius: 6px;
+    color: inherit;
+    font: inherit;
+    /* 16px stops iOS zooming the viewport on focus. */
+    font-size: 16px;
+  }
+
+  textarea {
+    resize: vertical;
+  }
+
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: 2px solid var(--accent, #c5a059);
+    outline-offset: 1px;
+  }
+
+  .invalid input,
+  .invalid select,
+  .invalid textarea {
+    border-color: var(--danger, #b91c1c);
+  }
+
+  .err {
+    margin: 6px 0 0;
+    font-size: 0.85rem;
+    color: #f87171;
+  }
+
+  /* Radio and checkbox rows: the whole row is the target, not just the dot. */
+  .checks,
+  .yesno {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .yesno {
+    flex-direction: row;
+    gap: 10px;
+  }
+
+  .checks label,
+  .yesno label {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 11px 13px;
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+    border-radius: 6px;
+    cursor: pointer;
+    line-height: 1.45;
+  }
+
+  .yesno label {
+    flex: 1;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .checks input,
+  .yesno input {
+    margin: 2px 0 0;
+    accent-color: var(--primary, #9b1b1b);
+    flex: none;
+  }
+
+  .checks label:has(input:checked),
+  .yesno label:has(input:checked) {
+    border-color: var(--accent, #c5a059);
+    background: rgba(197, 160, 89, 0.08);
+  }
+
+  /* An initialled rule: the box sits beside the text it belongs to. */
+  .rule {
+    display: grid;
+    grid-template-columns: 74px 1fr;
+    gap: 12px;
+    align-items: start;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.06));
+  }
+
+  .rule-initials input {
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 10px 6px;
+  }
+
+  .rule-text {
+    margin: 0;
+    font-size: 0.93rem;
+    line-height: 1.5;
+    padding-top: 11px;
+  }
+
+  .rule.invalid .rule-initials input {
+    border-color: var(--danger, #b91c1c);
+  }
+
+  .rule .err {
+    grid-column: 1 / -1;
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  @media (max-width: 420px) {
+    .rule {
+      grid-template-columns: 62px 1fr;
+      gap: 10px;
+    }
+  }
+</style>

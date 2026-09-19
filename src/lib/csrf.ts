@@ -36,11 +36,12 @@ import type { AstroCookies } from 'astro';
  * adding a route that posts while signed out; there is no reason to invent one
  * otherwise.
  */
-export type CsrfScope = '/admin' | '/contact';
+export type CsrfScope = '/admin' | '/contact' | '/check-in';
 
 const COOKIES: Record<CsrfScope, string> = {
   '/admin': 'dj_form_csrf',
   '/contact': 'dj_public_csrf',
+  '/check-in': 'dj_checkin_csrf',
 };
 
 const SHAPE = /^[0-9a-f]{64}$/;

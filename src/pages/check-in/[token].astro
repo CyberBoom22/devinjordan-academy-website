@@ -1,0 +1,773 @@
+---
+/**
+ * Student self check-in.
+ *
+ * Scanned from a projector in a room full of people who want to be sitting
+ * down. Mobile-first at 360px, large targets, one scroll, and no client
+ * JavaScript at all — the production CSP forbids inline scripts and the range
+ * has one bar of signal.
+ *
+ * A SCAN IS A CLAIM, NOT A RECORD
+ * -------------------------------
+ * Every row this page writes lands `pending`. What makes attendance official is
+ * the instructor's certification at the end of the day, and that separation is
+ * the whole design: a student can only ever assert they are present, and
+ * somebody accountable confirms it. This file must never write `verified`.
+ *
+ * ZERO OR SEVERAL MATCHES IS NOT A MATCH
+ * --------------------------------------
+ * The returning-student lookup either finds exactly one person or it does not
+ * find anybody. It never picks the closest. A duplicate student record is
+ * visible, irritating and fixable in an afternoon; attaching this student's
+ * qualification score to a different person's permanent record is invisible,
+ * permanent and the kind of thing discovered during an audit years later. So an
+ * ambiguous lookup falls through to registration and flags the row for review.
+ *
+ * NOTHING IDENTIFYING IS RENDERED TO AN UNAUTHENTICATED SCANNER
+ * ------------------------------------------------------------
+ * A confirmed match is shown masked — "Is this you? J••• D••, DJSTA-2024-••1847"
+ * — because whoever holds this link could be anybody. Confirming is one tap;
+ * learning a stranger's name and number from it is not possible.
+ */
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { csrfValid, issueCsrfToken } from '../../lib/csrf';
+import {
+  resolveCheckinToken,
+  findReturningStudent,
+  registerStudent,
+  recordCheckin,
+  rateLimited,
+  type MaskedMatch,
+} from '../../lib/checkin/service';
+import { sessionDate, sessionTime, sessionZone } from '../../lib/format';
+
+export const prerender = false;
+
+const token = Astro.params.token ?? '';
+const runtimeEnv = Astro.locals.runtime?.env as Record<string, string | undefined> | undefined;
+
+/** Twenty in ten minutes per /24 — a whole classroom shares one WiFi NAT. */
+const RATE_LIMIT = 20;
+const RATE_WINDOW_MINUTES = 10;
+
+function ipPrefix(raw: string | null): string {
+  if (!raw) return 'unknown';
+  const ip = raw.split(',')[0]!.trim();
+  if (ip.includes(':')) return `${ip.split(':').slice(0, 4).join(':')}::/64`;
+  const octets = ip.split('.');
+  return octets.length === 4 ? `${octets.slice(0, 3).join('.')}.0/24` : 'unknown';
+}
+
+function clean(value: unknown, max: number): string | null {
+  const text = String(value ?? '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return text ? text.slice(0, max) : null;
+}
+
+function cleanDate(value: unknown): string | null {
+  const text = String(value ?? '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return null;
+  const parsed = new Date(`${text}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.getTime() > Date.now()) return null;
+  return text;
+}
+
+const { session, state } = await resolveCheckinToken(token, runtimeEnv);
+
+type Step = 'choose' | 'lookup' | 'confirm' | 'register' | 'done' | 'closed';
+
+let step: Step = state === 'open' ? 'choose' : 'closed';
+let error: string | null = null;
+let match: MaskedMatch | null = null;
+let done: { name: string; studentNo: string; timeIn: string; reopened: boolean } | null = null;
+let draft: Record<string, string> = {};
+/** Set when a lookup found nobody or several people. */
+let reviewFlag = false;
+
+const ip = ipPrefix(
+  Astro.request.headers.get('cf-connecting-ip') ?? Astro.request.headers.get('x-forwarded-for'),
+);
+
+if (Astro.request.method === 'POST' && session && state === 'open') {
+  const form = await Astro.request.formData();
+  const action = String(form.get('action') ?? '');
+
+  if (!csrfValid(Astro.cookies, form.get('csrf'), '/check-in')) {
+    error = 'That page had been open a while. Please try again.';
+    step = 'choose';
+  } else if (await rateLimited(ip, RATE_LIMIT, RATE_WINDOW_MINUTES, runtimeEnv)) {
+    error = 'Too many attempts from this network. Ask your instructor to add you.';
+    step = 'choose';
+  } else if (action === 'lookup') {
+    step = 'lookup';
+    const lastName = clean(form.get('lastName'), 80);
+    const dob = cleanDate(form.get('dob'));
+    const studentNo = clean(form.get('studentNo'), 20);
+
+    if (!studentNo && (!lastName || !dob)) {
+      error = 'Enter your last name and date of birth, or your DJSTA number.';
+    } else {
+      const result = await findReturningStudent(
+        studentNo ? { studentNo } : { lastName: lastName!, dob: dob! },
+        runtimeEnv,
+      );
+
+      if (result.match) {
+        match = result.match;
+        step = 'confirm';
+      } else {
+        // Not found, or found several. Either way we do not guess — register
+        // them and let the instructor merge.
+        reviewFlag = true;
+        step = 'register';
+        error = result.ambiguous
+          ? 'More than one record matches that. Fill this in and your instructor will sort it out at the desk.'
+          : 'No record matched that. If this is your first class, fill this in.';
+        draft = { last: lastName ?? '', dob: dob ?? '' };
+      }
+    }
+  } else if (action === 'confirm') {
+    const studentId = String(form.get('studentId') ?? '');
+    const outcome = await recordCheckin(
+      {
+        sessionId: session.id,
+        studentId,
+        selfAttestedName: String(form.get('attested') ?? ''),
+        ip,
+        userAgent: Astro.request.headers.get('user-agent'),
+      },
+      runtimeEnv,
+    );
+
+    if (outcome.ok) {
+      done = {
+        name: outcome.fullName,
+        studentNo: outcome.studentNo,
+        timeIn: outcome.timeIn,
+        reopened: outcome.reopened,
+      };
+      step = 'done';
+    } else {
+      error = outcome.error;
+      step = 'choose';
+    }
+  } else if (action === 'register') {
+    step = 'register';
+    draft = Object.fromEntries(
+      [
+        'first',
+        'middle',
+        'last',
+        'dob',
+        'email',
+        'phone',
+        'line1',
+        'city',
+        'state',
+        'zip',
+        'emName',
+        'emRel',
+        'emPhone',
+        'preferred',
+      ].map((key) => [key, String(form.get(key) ?? '')]),
+    );
+
+    const first = clean(form.get('first'), 80);
+    const last = clean(form.get('last'), 80);
+    const dob = cleanDate(form.get('dob'));
+    const email = clean(form.get('email'), 200)?.toLowerCase() ?? null;
+    const preferredRaw = String(form.get('preferred') ?? '');
+    const preferred = ['email', 'text', 'phone'].includes(preferredRaw)
+      ? (preferredRaw as 'email' | 'text' | 'phone')
+      : null;
+
+    if (!first || !last) error = 'Your legal first and last name are both needed.';
+    else if (!dob) error = 'A valid date of birth is needed.';
+    else if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+      error = 'An email address is needed — it is how your certificate reaches you.';
+    else {
+      const created = await registerStudent(
+        {
+          legalFirst: first,
+          legalMiddle: clean(form.get('middle'), 80),
+          legalLast: last,
+          dob,
+          email,
+          phone: clean(form.get('phone'), 40),
+          addressLine1: clean(form.get('line1'), 200),
+          city: clean(form.get('city'), 80),
+          state: clean(form.get('state'), 2)?.toUpperCase() ?? null,
+          zip: clean(form.get('zip'), 10),
+          emergencyName: clean(form.get('emName'), 120),
+          emergencyRelationship: clean(form.get('emRel'), 60),
+          emergencyPhone: clean(form.get('emPhone'), 40),
+          preferredContact: preferred,
+        },
+        runtimeEnv,
+      );
+
+      if ('error' in created) {
+        error = created.error;
+      } else {
+        const outcome = await recordCheckin(
+          {
+            sessionId: session.id,
+            studentId: created.studentId,
+            selfAttestedName: `${first} ${last}`,
+            needsReview: String(form.get('review') ?? '') === '1',
+            ip,
+            userAgent: Astro.request.headers.get('user-agent'),
+          },
+          runtimeEnv,
+        );
+
+        if (outcome.ok) {
+          done = {
+            name: outcome.fullName,
+            studentNo: outcome.studentNo,
+            timeIn: outcome.timeIn,
+            reopened: outcome.reopened,
+          };
+          step = 'done';
+          error = null;
+        } else {
+          error = outcome.error;
+        }
+      }
+    }
+  } else if (action === 'returning') {
+    step = 'lookup';
+  } else if (action === 'first-time') {
+    step = 'register';
+  }
+}
+
+const csrfToken = issueCsrfToken(Astro.cookies, Astro.url, '/check-in');
+
+function when(value: string): string {
+  return sessionTime(value);
+}
+
+const heading: Record<Step, string> = {
+  choose: 'Check in',
+  lookup: 'Find your record',
+  confirm: 'Is this you?',
+  register: 'Your details',
+  done: 'You are checked in',
+  closed: 'Check-in is closed',
+};
+---
+
+<BaseLayout
+  title={session ? `Check in — ${session.courseName}` : 'Check in'}
+  description="Student check-in for a Devin Jordan Security Training Academy class."
+  noindex
+>
+  <main class="wrap">
+    {
+      !session ? (
+        <section class="card">
+          <h1>That code was not recognised</h1>
+          <p>
+            The link may have been mistyped, or the class may have finished. Ask your instructor for
+            the current code.
+          </p>
+        </section>
+      ) : (
+        <>
+          <header class="head">
+            <p class="eyebrow">{session.courseName}</p>
+            <h1>{heading[step]}</h1>
+            <p class="sess">
+              {sessionDate(session.startsAt)} · {when(session.startsAt)}–{when(session.endsAt)}{' '}
+              {sessionZone(session.startsAt)}
+              <br />
+              {session.location}
+              {session.instructorName && <> · {session.instructorName}</>}
+            </p>
+          </header>
+
+          {error && <div class="alert">{error}</div>}
+
+          {step === 'closed' && (
+            <section class="card">
+              <p class="big">
+                {state === 'too_early'
+                  ? 'Check-in has not opened yet for this class.'
+                  : 'Check-in for this class has closed.'}
+              </p>
+              <p>Ask your instructor to add you to the roster.</p>
+            </section>
+          )}
+
+          {step === 'choose' && (
+            <section class="card">
+              <p class="big">Have you trained with DJSTA before?</p>
+              <form method="POST">
+                <input type="hidden" name="csrf" value={csrfToken} />
+                <button type="submit" name="action" value="returning" class="big-btn">
+                  Yes — I have a student number
+                </button>
+                <button type="submit" name="action" value="first-time" class="big-btn ghost">
+                  No — this is my first class
+                </button>
+              </form>
+            </section>
+          )}
+
+          {step === 'lookup' && (
+            <section class="card">
+              <form method="POST">
+                <input type="hidden" name="csrf" value={csrfToken} />
+                <input type="hidden" name="action" value="lookup" />
+
+                <label class="field">
+                  <span>Last name</span>
+                  <input type="text" name="lastName" autocomplete="family-name" />
+                </label>
+
+                <label class="field">
+                  <span>Date of birth</span>
+                  <input type="date" name="dob" autocomplete="bday" />
+                </label>
+
+                <p class="or">or</p>
+
+                <label class="field">
+                  <span>DJSTA student number</span>
+                  <input
+                    type="text"
+                    name="studentNo"
+                    placeholder="DJSTA-2024-001847"
+                    autocapitalize="characters"
+                  />
+                </label>
+
+                <button type="submit" class="big-btn">
+                  Find me
+                </button>
+              </form>
+            </section>
+          )}
+
+          {step === 'confirm' && match && (
+            <section class="card">
+              <p class="big">Is this you?</p>
+              <p class="masked">
+                {match.masked}
+                <span>{match.maskedNumber}</span>
+              </p>
+              <form method="POST">
+                <input type="hidden" name="csrf" value={csrfToken} />
+                <input type="hidden" name="action" value="confirm" />
+                <input type="hidden" name="studentId" value={match.studentId} />
+                <input type="hidden" name="attested" value={match.masked} />
+                <button type="submit" class="big-btn">
+                  Yes, check me in
+                </button>
+              </form>
+              <form method="POST" class="secondary">
+                <input type="hidden" name="csrf" value={csrfToken} />
+                <button type="submit" name="action" value="first-time" class="link-btn">
+                  That is not me
+                </button>
+              </form>
+            </section>
+          )}
+
+          {step === 'register' && (
+            <section class="card">
+              <form method="POST">
+                <input type="hidden" name="csrf" value={csrfToken} />
+                <input type="hidden" name="action" value="register" />
+                {reviewFlag && <input type="hidden" name="review" value="1" />}
+
+                <div class="two">
+                  <label class="field">
+                    <span>Legal first name *</span>
+                    <input
+                      type="text"
+                      name="first"
+                      required
+                      value={draft.first ?? ''}
+                      autocomplete="given-name"
+                    />
+                  </label>
+                  <label class="field">
+                    <span>Middle</span>
+                    <input
+                      type="text"
+                      name="middle"
+                      value={draft.middle ?? ''}
+                      autocomplete="additional-name"
+                    />
+                  </label>
+                </div>
+
+                <label class="field">
+                  <span>Legal last name *</span>
+                  <input
+                    type="text"
+                    name="last"
+                    required
+                    value={draft.last ?? ''}
+                    autocomplete="family-name"
+                  />
+                </label>
+
+                <label class="field">
+                  <span>Date of birth *</span>
+                  <input
+                    type="date"
+                    name="dob"
+                    required
+                    value={draft.dob ?? ''}
+                    autocomplete="bday"
+                  />
+                </label>
+
+                <label class="field">
+                  <span>Email *</span>
+                  <input
+                    type="email"
+                    name="email"
+                    required
+                    value={draft.email ?? ''}
+                    autocomplete="email"
+                  />
+                </label>
+
+                <label class="field">
+                  <span>Mobile</span>
+                  <input type="tel" name="phone" value={draft.phone ?? ''} autocomplete="tel" />
+                </label>
+
+                <label class="field">
+                  <span>Address</span>
+                  <input
+                    type="text"
+                    name="line1"
+                    value={draft.line1 ?? ''}
+                    autocomplete="address-line1"
+                  />
+                </label>
+
+                <div class="three">
+                  <label class="field">
+                    <span>City</span>
+                    <input
+                      type="text"
+                      name="city"
+                      value={draft.city ?? ''}
+                      autocomplete="address-level2"
+                    />
+                  </label>
+                  <label class="field">
+                    <span>State</span>
+                    <input
+                      type="text"
+                      name="state"
+                      maxlength="2"
+                      value={draft.state ?? ''}
+                      autocomplete="address-level1"
+                    />
+                  </label>
+                  <label class="field">
+                    <span>ZIP</span>
+                    <input
+                      type="text"
+                      name="zip"
+                      maxlength="10"
+                      value={draft.zip ?? ''}
+                      autocomplete="postal-code"
+                    />
+                  </label>
+                </div>
+
+                <p class="sub">Emergency contact</p>
+                <div class="two">
+                  <label class="field">
+                    <span>Name</span>
+                    <input type="text" name="emName" value={draft.emName ?? ''} />
+                  </label>
+                  <label class="field">
+                    <span>Relationship</span>
+                    <input type="text" name="emRel" value={draft.emRel ?? ''} />
+                  </label>
+                </div>
+                <label class="field">
+                  <span>Their phone</span>
+                  <input type="tel" name="emPhone" value={draft.emPhone ?? ''} />
+                </label>
+
+                <label class="field">
+                  <span>Best way to reach you</span>
+                  <select name="preferred">
+                    <option value="">No preference</option>
+                    <option value="phone" selected={draft.preferred === 'phone'}>
+                      Phone call
+                    </option>
+                    <option value="text" selected={draft.preferred === 'text'}>
+                      Text message
+                    </option>
+                    <option value="email" selected={draft.preferred === 'email'}>
+                      Email
+                    </option>
+                  </select>
+                </label>
+
+                <button type="submit" class="big-btn">
+                  Check in
+                </button>
+                <p class="fineprint">
+                  Your instructor collects the rest of the paperwork in class. We do not ask for a
+                  Social Security number here, and never will.
+                </p>
+              </form>
+            </section>
+          )}
+
+          {step === 'done' && done && (
+            <section class="card done">
+              <div class="tick" aria-hidden="true">
+                ✓
+              </div>
+              <p class="big">{done.reopened ? 'Already checked in' : 'Checked in'}</p>
+              <p class="name">{done.name}</p>
+              <p class="no">{done.studentNo}</p>
+              <p class="at">
+                {session.title}
+                <br />
+                Time in {when(done.timeIn)} {sessionZone(done.timeIn)}
+              </p>
+              <p class="fineprint">
+                Keep your student number — it is yours permanently and you will be asked for it at
+                your next class. Your instructor confirms the roster at the end of the day.
+              </p>
+            </section>
+          )}
+        </>
+      )
+    }
+  </main>
+</BaseLayout>
+
+<style>
+  .wrap {
+    max-width: 520px;
+    margin: 0 auto;
+    padding: 80px 16px 60px;
+  }
+
+  .head {
+    text-align: center;
+    margin-bottom: 20px;
+  }
+
+  .eyebrow {
+    margin: 0;
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent, #c5a059);
+  }
+
+  .head h1 {
+    margin: 6px 0 10px;
+    font-size: 1.6rem;
+  }
+
+  .sess {
+    margin: 0;
+    font-size: 0.88rem;
+    line-height: 1.6;
+    color: var(--text-muted, #a1a1aa);
+  }
+
+  .card {
+    background: var(--surface-1, #17171b);
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+    border-radius: 12px;
+    padding: 24px 20px 26px;
+  }
+
+  .big {
+    margin: 0 0 16px;
+    font-size: 1.15rem;
+    text-align: center;
+  }
+
+  .alert {
+    margin-bottom: 16px;
+    padding: 13px 16px;
+    border-radius: 8px;
+    border-left: 3px solid var(--accent, #c5a059);
+    background: rgba(197, 160, 89, 0.1);
+    font-size: 0.92rem;
+    line-height: 1.5;
+  }
+
+  .field {
+    display: block;
+    margin-bottom: 14px;
+  }
+
+  .field span {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted, #a1a1aa);
+  }
+
+  .field input,
+  .field select {
+    width: 100%;
+    padding: 14px;
+    background: var(--surface-2, #101013);
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.14));
+    border-radius: 8px;
+    color: inherit;
+    font: inherit;
+    /* 16px or iOS zooms the page on focus and the layout jumps. */
+    font-size: 16px;
+  }
+
+  .two {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 10px;
+  }
+
+  .three {
+    display: grid;
+    grid-template-columns: 2fr 0.7fr 1fr;
+    gap: 10px;
+  }
+
+  .sub {
+    margin: 18px 0 8px;
+    font-size: 0.75rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent, #c5a059);
+  }
+
+  /* 56px tall. This is tapped by somebody holding a phone in one hand. */
+  .big-btn {
+    display: block;
+    width: 100%;
+    min-height: 56px;
+    margin-top: 12px;
+    padding: 16px;
+    background: var(--primary, #9b1b1b);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font: inherit;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .big-btn.ghost {
+    background: transparent;
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.2));
+    color: inherit;
+  }
+
+  .link-btn {
+    display: block;
+    width: 100%;
+    margin-top: 14px;
+    background: none;
+    border: none;
+    color: var(--text-muted, #a1a1aa);
+    font: inherit;
+    font-size: 0.9rem;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+
+  .secondary {
+    margin: 0;
+  }
+
+  .or {
+    margin: 16px 0;
+    text-align: center;
+    font-size: 0.8rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted, #a1a1aa);
+  }
+
+  .masked {
+    margin: 0 0 8px;
+    text-align: center;
+    font-size: 1.5rem;
+    letter-spacing: 0.06em;
+  }
+
+  .masked span {
+    display: block;
+    margin-top: 6px;
+    font-size: 0.95rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: var(--accent, #c5a059);
+    letter-spacing: 0.04em;
+  }
+
+  .done {
+    text-align: center;
+  }
+
+  .tick {
+    width: 64px;
+    height: 64px;
+    margin: 4px auto 16px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    font-size: 2rem;
+    color: #fff;
+    background: #15803d;
+  }
+
+  .name {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 700;
+  }
+
+  .no {
+    margin: 4px 0 14px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 1.05rem;
+    color: var(--accent, #c5a059);
+  }
+
+  .at {
+    margin: 0 0 16px;
+    font-size: 0.92rem;
+    line-height: 1.6;
+    color: var(--text-muted, #a1a1aa);
+  }
+
+  .fineprint {
+    margin: 14px 0 0;
+    font-size: 0.8rem;
+    line-height: 1.55;
+    color: var(--text-muted, #a1a1aa);
+  }
+
+  @media (max-width: 380px) {
+    .two,
+    .three {
+      grid-template-columns: 1fr;
+      gap: 0;
+    }
+  }
+</style>

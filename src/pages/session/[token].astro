@@ -1,0 +1,362 @@
+---
+/**
+ * The projector view.
+ *
+ * A screen pointed at a room. It shows the QR code people scan and the roster
+ * filling up, and it does nothing else — there is no button on this page that
+ * changes anything, because the page has no session and no permissions.
+ *
+ * WHY IT LIVES OUTSIDE /admin
+ * ---------------------------
+ * MAX_SESSION_HOURS is two, and an eight-hour permit-to-carry qualification day
+ * outlives that four times over. An admin page would bounce to a 2FA prompt
+ * partway through the morning, in front of the students, with the QR code they
+ * were about to scan replaced by a login form. Raising the global cap to fix
+ * that would weaken every other admin page to suit one screen.
+ *
+ * So this route is reached by an unguessable presenter token instead, it is
+ * read-only, and it stops working two hours after check-in closes. Every action
+ * that changes anything — verify, score, certify, issue — stays behind /admin
+ * where a re-auth is merely annoying.
+ *
+ * WHAT IT MAY DISPLAY
+ * -------------------
+ * First name and last initial, and a time. Nothing else. This screen is visible
+ * to the whole room, to whoever walks past the door, and to any phone camera in
+ * it; a full name, a date of birth or a complete student number here is a data
+ * breach with an audience.
+ *
+ * NO REALTIME
+ * -----------
+ * The roster refreshes by polling a JSON endpoint every five seconds. Supabase
+ * Realtime would need the anon key and a security-definer view in the browser,
+ * which is a second way into student data to maintain and audit, to save four
+ * seconds of latency on a screen nobody is staring at. Polling is the boring
+ * answer and it degrades to "slightly stale" rather than "silently stopped".
+ */
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { presenterRoster, checkinTokenFor } from '../../lib/checkin/service';
+import { sessionDate, sessionTime, sessionZone } from '../../lib/format';
+import QRCode from 'qrcode';
+import { getSiteUrl } from '../../lib/supabase/env';
+
+export const prerender = false;
+
+const token = Astro.params.token ?? '';
+const runtimeEnv = Astro.locals.runtime?.env as Record<string, string | undefined> | undefined;
+
+const { session, roster } = await presenterRoster(token, runtimeEnv);
+const checkinToken = session ? await checkinTokenFor(token, runtimeEnv) : null;
+
+const siteUrl = getSiteUrl(runtimeEnv).replace(/\/$/, '');
+const checkinUrl = checkinToken ? `${siteUrl}/check-in/${checkinToken}` : null;
+
+/**
+ * Rendered on the server as inline SVG. The CSP forbids CDN scripts, and a QR
+ * image API would hand a third party the address of every class the academy
+ * runs.
+ */
+let qrSvg: string | null = null;
+if (checkinUrl) {
+  qrSvg = await QRCode.toString(checkinUrl, {
+    type: 'svg',
+    errorCorrectionLevel: 'M',
+    // Four modules of quiet zone. Scanners need it and projectors eat it.
+    margin: 4,
+    color: { dark: '#0a0b0d', light: '#ffffff' },
+  });
+}
+
+/**
+ * A six-character fallback, derived from the token rather than stored.
+ *
+ * Phones fail, cameras refuse to focus, and the alternative to a backup code is
+ * the instructor reading a 32-character hex string aloud. Derived rather than
+ * random because it must survive a page reload without another column.
+ */
+const backupCode = checkinToken
+  ? checkinToken.slice(0, 6).toUpperCase().replace(/0/g, 'Q').replace(/1/g, 'Y')
+  : null;
+
+const now = Date.now();
+const windowOpen =
+  session &&
+  now >= new Date(session.checkinOpensAt).getTime() &&
+  now <= new Date(session.checkinClosesAt).getTime();
+---
+
+<BaseLayout
+  title={session ? session.title : 'Session'}
+  description="Live check-in display."
+  noindex
+  bare
+>
+  {
+    !session ? (
+      <div class="gone">
+        <h1>This display is no longer available</h1>
+        <p>The link has expired, or the class finished more than two hours ago.</p>
+      </div>
+    ) : (
+      <div class="stage" data-roster-endpoint={`/session/${token}/roster.json`}>
+        <header class="top">
+          <div>
+            <p class="course">{session.courseName}</p>
+            <h1>{session.title}</h1>
+            <p class="where">
+              {sessionDate(session.startsAt)} · {sessionTime(session.startsAt)}–
+              {sessionTime(session.endsAt)} {sessionZone(session.startsAt)} · {session.location}
+            </p>
+          </div>
+          <p class="rec">{session.courseRecordId}</p>
+        </header>
+
+        <div class="cols">
+          <section class="qr-col">
+            {windowOpen && qrSvg ? (
+              <>
+                <div class="qr" set:html={qrSvg} />
+                <p class="scan">Scan to check in</p>
+                <p class="url">{checkinUrl}</p>
+                {backupCode && (
+                  <p class="backup">
+                    <span>or enter code</span>
+                    <strong>{backupCode}</strong>
+                  </p>
+                )}
+              </>
+            ) : (
+              <div class="shut">
+                <p class="shut-big">Check-in is closed</p>
+                <p>See your instructor to be added to the roster.</p>
+              </div>
+            )}
+          </section>
+
+          <section class="roster-col">
+            <h2>
+              Checked in{' '}
+              <span class="count" data-roster-count>
+                {roster.length}
+              </span>
+            </h2>
+            <ol class="roster" data-roster-list>
+              {roster.map((entry) => (
+                <li>
+                  <span class="who">{entry.name}</span>
+                  <span class="at">{sessionTime(entry.timeIn)}</span>
+                </li>
+              ))}
+            </ol>
+            {roster.length === 0 && (
+              <p class="empty" data-roster-empty>
+                Nobody has checked in yet.
+              </p>
+            )}
+          </section>
+        </div>
+      </div>
+    )
+  }
+</BaseLayout>
+
+<style>
+  :global(body) {
+    background: var(--bg-dark, #0a0b0d);
+  }
+
+  .gone,
+  .stage {
+    min-height: 100vh;
+    padding: 28px 34px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .gone {
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+  }
+
+  .top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 24px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .course {
+    margin: 0;
+    font-size: clamp(0.8rem, 1vw, 1rem);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent, #c5a059);
+  }
+
+  .top h1 {
+    margin: 4px 0 6px;
+    font-size: clamp(1.5rem, 2.6vw, 2.6rem);
+    line-height: 1.15;
+  }
+
+  .where {
+    margin: 0;
+    font-size: clamp(0.85rem, 1.1vw, 1.15rem);
+    color: rgba(255, 255, 255, 0.62);
+  }
+
+  .rec {
+    margin: 0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: clamp(0.85rem, 1.1vw, 1.2rem);
+    color: var(--accent, #c5a059);
+    white-space: nowrap;
+  }
+
+  .cols {
+    flex: 1;
+    display: grid;
+    grid-template-columns: minmax(420px, 44%) 1fr;
+    gap: 40px;
+    align-items: start;
+    padding-top: 26px;
+  }
+
+  .qr-col {
+    text-align: center;
+  }
+
+  /* 420px floor: below that a phone at the back of a room cannot resolve it. */
+  .qr {
+    width: min(100%, 520px);
+    min-width: 420px;
+    margin: 0 auto;
+    background: #fff;
+    border-radius: 14px;
+    padding: 18px;
+  }
+
+  .qr :global(svg) {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+
+  .scan {
+    margin: 18px 0 6px;
+    font-size: clamp(1.1rem, 1.8vw, 1.8rem);
+    font-weight: 700;
+  }
+
+  .url {
+    margin: 0;
+    font-size: clamp(0.8rem, 1vw, 1.05rem);
+    color: rgba(255, 255, 255, 0.66);
+    word-break: break-all;
+  }
+
+  .backup {
+    margin: 14px 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .backup span {
+    font-size: 0.8rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.5);
+  }
+
+  .backup strong {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: clamp(1.4rem, 2.2vw, 2.2rem);
+    letter-spacing: 0.22em;
+    color: var(--accent, #c5a059);
+  }
+
+  .shut {
+    padding: 60px 20px;
+  }
+
+  .shut-big {
+    font-size: clamp(1.4rem, 2.4vw, 2.2rem);
+    margin: 0 0 8px;
+  }
+
+  .roster-col h2 {
+    margin: 0 0 14px;
+    font-size: clamp(0.9rem, 1.2vw, 1.2rem);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.6);
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+
+  .count {
+    font-size: clamp(1.8rem, 3vw, 3rem);
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: 0;
+  }
+
+  .roster {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 8px 22px;
+  }
+
+  .roster li {
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 8px;
+    font-size: clamp(1rem, 1.4vw, 1.5rem);
+  }
+
+  .who {
+    font-weight: 600;
+  }
+
+  .at {
+    color: rgba(255, 255, 255, 0.5);
+    font-variant-numeric: tabular-nums;
+  }
+
+  :global(.roster-stale) {
+    margin: 0 0 12px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    background: rgba(185, 28, 28, 0.18);
+    border-left: 3px solid #b91c1c;
+    font-size: clamp(0.85rem, 1.1vw, 1.1rem);
+  }
+
+  .empty {
+    color: rgba(255, 255, 255, 0.45);
+    font-size: clamp(1rem, 1.3vw, 1.3rem);
+  }
+
+  @media (max-width: 1100px) {
+    .cols {
+      grid-template-columns: 1fr;
+      gap: 28px;
+    }
+
+    .qr {
+      min-width: 0;
+      width: min(100%, 380px);
+    }
+  }
+</style>

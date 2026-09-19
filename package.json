@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Devin Jordan Security Training Academy \u2014 website and content management system",
+  "description": "Devin Jordan Security Training Academy — website and content management system",
   "engines": {
     "node": ">=20"
   },
@@ -26,10 +26,12 @@
     "@astrojs/sitemap": "^3.2.1",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.47.10",
-    "astro": "^5.1.1"
+    "astro": "^5.1.1",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
+    "@types/qrcode": "^1.5.6",
     "@typescript-eslint/eslint-plugin": "^8.19.0",
     "@typescript-eslint/parser": "^8.19.0",
     "eslint": "^8.57.1",
