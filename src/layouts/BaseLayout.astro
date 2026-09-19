@@ -18,9 +18,17 @@ interface Props {
   description?: string;
   /** Omit the trailing site name — used for the homepage, whose title is the site name. */
   bareTitle?: boolean;
+  /**
+   * Keep the page out of search results. Set on anything reached by a token
+   * rather than by browsing: a check-in link indexed by Google is a roster
+   * anybody can find.
+   */
+  noindex?: boolean;
+  /** Drop the site header and footer. For the projector view, which is a screen in a room, not a page. */
+  bare?: boolean;
 }
 
-const { title, description, bareTitle = false } = Astro.props;
+const { title, description, bareTitle = false, noindex = false, bare = false } = Astro.props;
 
 const settings = await getSettings(Astro.locals.supabase);
 const siteName = settings['site.name'] ?? 'Devin Jordan Security Training Academy';
@@ -36,7 +44,8 @@ const canonical = new URL(Astro.url.pathname, Astro.site ?? Astro.url.origin).hr
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{pageTitle}</title>
     <meta name="description" content={pageDescription} />
-    <link rel="canonical" href={canonical} />
+    {!noindex && <link rel="canonical" href={canonical} />}
+    {noindex && <meta name="robots" content="noindex, nofollow" />}
 
     <meta name="referrer" content="strict-origin-when-cross-origin" />
     <meta name="theme-color" content="#0a0b0d" />
@@ -92,17 +101,27 @@ const canonical = new URL(Astro.url.pathname, Astro.site ?? Astro.url.origin).hr
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
 
-    <Preloader siteName={siteName} />
-    <AdminBar />
-
-    <Nav />
-    <FindBar />
+    {
+      /* `bare` strips the chrome for the projector view. A nav bar and a
+        footer on a screen pointed at a classroom are thirty wasted pixels and
+        a link somebody might click by accident. */
+    }
+    {
+      !bare && (
+        <>
+          <Preloader siteName={siteName} />
+          <AdminBar />
+          <Nav />
+          <FindBar />
+        </>
+      )
+    }
 
     <main id="main">
       <slot />
     </main>
 
-    <Footer />
+    {!bare && <Footer />}
 
     <script>
       // Behaviour is split by concern and loaded once for the whole site.
@@ -112,15 +131,16 @@ const canonical = new URL(Astro.url.pathname, Astro.site ?? Astro.url.origin).hr
       import '../scripts/find';
       import '../scripts/legacy-hash';
 
-      // These two drive one page each, and would belong on those pages, except
-      // that a `<script>` in a page or in a component is registered in the
+      // These three drive one page each, and would belong on those pages,
+      // except that a `<script>` in a page or in a component is registered in the
       // build manifest and then never emitted as a chunk in this SSR setup —
       // so the page requested a file that did not exist and the feature was
-      // silently dead. Imported from the one entry Astro does emit. Both guard
-      // on an element that only their own page renders, so the cost elsewhere
-      // is a lookup that returns null.
+      // silently dead. Imported from the one entry Astro does emit. Each guards
+      // on an element that only its own page renders, so the cost elsewhere is
+      // a lookup that returns null.
       import '../scripts/ori';
       import '../scripts/news';
+      import '../scripts/session-roster';
     </script>
 
     <noscript>

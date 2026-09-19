@@ -132,9 +132,14 @@ create index if not exists course_sessions_status_idx on public.course_sessions 
  *
  * Same reasoning as the student number: a caller cannot supply these, so no
  * bug and no crafted request can pick a token or collide with an existing one.
- * The tokens are 32 hex characters from gen_random_bytes — unguessable, which
- * is the only thing protecting the projector view, since it sits outside the
- * admin guard by design.
+ *
+ * The tokens are a v4 UUID with the hyphens stripped: 32 hex characters, from
+ * the same cryptographic RNG, and unguessable — which is the only thing
+ * protecting the projector view, since it sits outside the admin guard by
+ * design. gen_random_uuid() rather than gen_random_bytes() because this
+ * function runs with `search_path = ''` and pgcrypto lives in `extensions`,
+ * not pg_catalog; an unqualified call would fail at insert time and a
+ * qualified one would tie the schema to an extension's install location.
  */
 create or replace function app.assign_session_identifiers()
 returns trigger
@@ -144,8 +149,8 @@ set search_path = ''
 as $$
 begin
   new.course_record_id := app.next_record_number('course_session', 'QR');
-  new.checkin_token    := encode(pg_catalog.gen_random_bytes(16), 'hex');
-  new.presenter_token  := encode(pg_catalog.gen_random_bytes(16), 'hex');
+  new.checkin_token    := pg_catalog.replace(pg_catalog.gen_random_uuid()::text, '-', '');
+  new.presenter_token  := pg_catalog.replace(pg_catalog.gen_random_uuid()::text, '-', '');
   return new;
 end;
 $$;
